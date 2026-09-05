@@ -9,6 +9,7 @@ import {
   FieldDefinitionModel,
   PropertyModel,
 } from "./database/models.js";
+import { resetFieldClassifications } from "./fields/field.service.js";
 import { generateDocument } from "./generation/document-generator.js";
 import { getRequirements } from "./generation/requirements.service.js";
 import { validateValues } from "./generation/validation.service.js";
@@ -29,6 +30,19 @@ const entityInput = z.object({
   fields: values,
 });
 const setInput = z.object({ name: z.string().min(1), templateIds: z.array(id) });
+const classificationInput = z.object({
+  classifications: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-f\d]{24}$/iu),
+        scope: z.enum(fieldScopes),
+        type: z.enum(fieldTypes),
+        searchable: z.boolean(),
+        filterable: z.boolean(),
+      }),
+    )
+    .min(1),
+});
 const generationInput = z.object({
   templateIds: z.array(id).min(1),
   buyers: z.array(z.object({ customerId: id.optional(), values })),
@@ -90,14 +104,51 @@ router.patch(
         filterable: z.boolean().optional(),
       })
       .parse(req.body);
-    const updated = await FieldDefinitionModel.findByIdAndUpdate(
-      req.params.id,
-      { ...body, classified: Boolean(body.scope) || undefined },
-      { new: true, runValidators: true },
-    );
+    const updated = await FieldDefinitionModel.findByIdAndUpdate(req.params.id, body, {
+      new: true,
+      runValidators: true,
+    });
     if (!updated) throw new AppError(404, "NOT_FOUND");
     await scanTemplates();
     res.json(updated);
+  }),
+);
+router.put(
+  "/fields/classifications",
+  asyncRoute(async (req, res) => {
+    const { classifications } = classificationInput.parse(req.body);
+    const pendingFields = await FieldDefinitionModel.find({ classified: false }, { _id: 1 }).lean();
+    const pendingIds = new Set(pendingFields.map((field) => field._id.toString()));
+    const submittedIds = new Set(classifications.map((classification) => classification.id));
+    const includesEveryPendingField =
+      pendingIds.size === submittedIds.size &&
+      [...pendingIds].every((fieldId) => submittedIds.has(fieldId));
+    if (!includesEveryPendingField) {
+      throw new AppError(409, "CLASSIFICATION_SET_CHANGED", {
+        expectedCount: pendingIds.size,
+        submittedCount: submittedIds.size,
+      });
+    }
+
+    await FieldDefinitionModel.bulkWrite(
+      classifications.map(({ id: fieldId, ...classification }) => ({
+        updateOne: {
+          filter: { _id: fieldId, classified: false },
+          update: { $set: { ...classification, classified: true } },
+        },
+      })),
+      { ordered: true },
+    );
+    await scanTemplates();
+    res.json(await FieldDefinitionModel.find().sort({ label: 1 }).lean());
+  }),
+);
+router.post(
+  "/fields/classifications/reset",
+  asyncRoute(async (_req, res) => {
+    await resetFieldClassifications();
+    await scanTemplates();
+    res.json(await FieldDefinitionModel.find().sort({ label: 1 }).lean());
   }),
 );
 
@@ -220,35 +271,35 @@ router.post(
     const mergedValues = {
       ...body.property.values,
       ...body.transactionValues,
-      ...(body.buyers[0]?.values ?? {}),
-      ...(body.sellers[0]?.values ?? {}),
     };
     const nonPersonTemplates = templates.map((template) => ({
       ...template,
       fields: template.fields.filter((field) => field.scope !== "person"),
     }));
     validateValues(nonPersonTemplates, mergedValues);
-    const personFieldsByKey = new Map<string, ResolvedTemplateField>();
+    const buyerFieldsByKey = new Map<string, ResolvedTemplateField>();
+    const sellerFieldsByKey = new Map<string, ResolvedTemplateField>();
     for (const template of templates) {
       for (const field of template.fields) {
         if (field.scope === "person" && field.required && field.key) {
-          personFieldsByKey.set(field.key, { ...field, key: field.key });
+          const resolvedField = { ...field, key: field.key };
+          if (field.partyRole !== "seller") buyerFieldsByKey.set(field.key, resolvedField);
+          if (field.partyRole !== "buyer") sellerFieldsByKey.set(field.key, resolvedField);
         }
       }
     }
-    const personFields = [...personFieldsByKey.values()];
     const missingParties: {
       group: "buyers" | "sellers";
       index: number;
       key: string;
       label: string;
     }[] = [];
-    for (const [group, parties] of [
-      ["buyers", body.buyers],
-      ["sellers", body.sellers],
+    for (const [group, parties, requiredFields] of [
+      ["buyers", body.buyers, [...buyerFieldsByKey.values()]],
+      ["sellers", body.sellers, [...sellerFieldsByKey.values()]],
     ] as const)
       for (const [index, party] of parties.entries())
-        for (const field of personFields)
+        for (const field of requiredFields)
           if (
             party.values[field.key] === undefined ||
             party.values[field.key] === null ||

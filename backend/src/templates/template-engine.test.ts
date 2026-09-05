@@ -81,7 +81,14 @@ describe("template engine", () => {
       errors: [],
       repeatSections: [{ role: "buyers", start: "X#קוניםX", end: "X/קוניםX" }],
       fields: [
-        { raw: "Xשם קונהX", label: "שם קונה", key: "name", required: true, classified: true },
+        {
+          raw: "Xשם קונהX",
+          label: "שם קונה",
+          key: "name",
+          required: true,
+          classified: true,
+          partyRole: "buyer",
+        },
       ],
     };
     const output = visible(
@@ -95,5 +102,52 @@ describe("template engine", () => {
     expect(output).toContain("דנה");
     expect(output).toContain("יואב");
     expect(output).not.toContain("#קונים");
+  });
+
+  it("keeps buyer and seller values separate without repeat markers", () => {
+    const buffer = docx(
+      `<w:p><w:r><w:t>Xשם פרטי מוכרX</w:t></w:r></w:p><w:p><w:r><w:t>Xשם פרטי קונהX</w:t></w:r></w:p>`,
+    );
+    const definition: TemplateDefinition = {
+      id: "roles",
+      filename: "roles.docx",
+      displayName: "roles",
+      hash: "h",
+      absolutePath: "",
+      valid: true,
+      errors: [],
+      repeatSections: [],
+      fields: [
+        {
+          raw: "Xשם פרטי מוכרX",
+          label: "שם פרטי מוכר",
+          key: "firstName",
+          required: true,
+          classified: true,
+          partyRole: "seller",
+        },
+        {
+          raw: "Xשם פרטי קונהX",
+          label: "שם פרטי קונה",
+          key: "firstName",
+          required: true,
+          classified: true,
+          partyRole: "buyer",
+        },
+      ],
+    };
+    const parsed = parseDocx(buffer);
+    expect(parsed.fields.map((field) => field.partyRole)).toEqual(["seller", "buyer"]);
+    const output = visible(
+      generateDocument({
+        templateBuffer: buffer,
+        templateDefinition: definition,
+        values: {},
+        buyers: [{ firstName: "קונה בדיקה" }],
+        sellers: [{ firstName: "מוכר בדיקה" }],
+      }),
+    );
+    expect(output).toContain("מוכר בדיקה");
+    expect(output).toContain("קונה בדיקה");
   });
 });

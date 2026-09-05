@@ -24,6 +24,8 @@ export const fieldRequirementSchema = z.object({
 
 export const requirementsSchema = z.object({
   personFields: z.array(fieldRequirementSchema),
+  buyerFields: z.array(fieldRequirementSchema),
+  sellerFields: z.array(fieldRequirementSchema),
   propertyFields: z.array(fieldRequirementSchema),
   transactionFields: z.array(fieldRequirementSchema),
 });

@@ -172,7 +172,7 @@ export function GenerationPage() {
             items={buyers.fields}
             append={() => buyers.append({ values: {} })}
             remove={buyers.remove}
-            fields={req.personFields}
+            fields={req.buyerFields}
             prefix="buyers"
             register={register}
             errors={errors}
@@ -184,7 +184,7 @@ export function GenerationPage() {
             items={sellers.fields}
             append={() => sellers.append({ values: {} })}
             remove={sellers.remove}
-            fields={req.personFields}
+            fields={req.sellerFields}
             prefix="sellers"
             register={register}
             errors={errors}

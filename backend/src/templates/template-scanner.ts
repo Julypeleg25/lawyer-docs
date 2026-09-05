@@ -31,9 +31,9 @@ export async function scanTemplates(): Promise<TemplateDefinition[]> {
       const buffer = await readFile(absolutePath);
       const parsed = parseDocx(buffer);
       await resolveTemplateFields(parsed.fields);
-      const unclassified = parsed.fields
-        .filter((field) => !field.classified)
-        .map((field) => field.label);
+      const unclassified = [
+        ...new Set(parsed.fields.filter((field) => !field.classified).map((field) => field.label)),
+      ];
       const errors = [
         ...parsed.errors,
         ...unclassified.map((label) => `נדרש סיווג לשדה: ${label}`),

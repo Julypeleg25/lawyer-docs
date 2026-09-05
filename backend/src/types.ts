@@ -13,6 +13,7 @@ export const fieldTypes = [
 ] as const;
 export type FieldScope = (typeof fieldScopes)[number];
 export type FieldType = (typeof fieldTypes)[number];
+export type PartyRole = "buyer" | "seller";
 export type DynamicValues = Record<string, unknown>;
 
 export interface FieldDefinition {
@@ -57,6 +58,7 @@ export interface TemplateFieldRequirement extends ParsedInstruction {
   scope?: FieldScope;
   type?: FieldType;
   classified: boolean;
+  partyRole?: PartyRole;
 }
 export interface RepeatSection {
   role: "buyers" | "sellers";
@@ -87,6 +89,8 @@ export interface FieldRequirement {
 
 export interface GenerationRequirements {
   personFields: FieldRequirement[];
+  buyerFields: FieldRequirement[];
+  sellerFields: FieldRequirement[];
   propertyFields: FieldRequirement[];
   transactionFields: FieldRequirement[];
 }

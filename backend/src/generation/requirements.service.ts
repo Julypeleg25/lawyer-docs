@@ -18,6 +18,23 @@ function getTemplates(templateIds: string[]): TemplateDefinition[] {
   });
 }
 
+function mergeRequirement(
+  requirements: Map<string, FieldRequirement>,
+  requirement: FieldRequirement,
+): void {
+  const existing = requirements.get(requirement.key);
+  if (!existing) {
+    requirements.set(requirement.key, { ...requirement });
+    return;
+  }
+  existing.required = existing.required || requirement.required;
+  for (const templateId of requirement.requiredByTemplateIds) {
+    if (!existing.requiredByTemplateIds.includes(templateId)) {
+      existing.requiredByTemplateIds.push(templateId);
+    }
+  }
+}
+
 export async function getRequirements(templateIds: string[]): Promise<GenerationRequirements> {
   const templates = getTemplates(templateIds);
   const invalidTemplate = templates.find((template) => !template.valid);
@@ -30,6 +47,8 @@ export async function getRequirements(templateIds: string[]): Promise<Generation
   );
   const definitions = await FieldDefinitionModel.find({ key: { $in: fieldKeys } }).lean();
   const requirementsByKey = new Map<string, FieldRequirement>();
+  const buyerRequirementsByKey = new Map<string, FieldRequirement>();
+  const sellerRequirementsByKey = new Map<string, FieldRequirement>();
 
   for (const template of templates) {
     for (const field of template.fields) {
@@ -41,16 +60,7 @@ export async function getRequirements(templateIds: string[]): Promise<Generation
         throw new AppError(422, "UNCLASSIFIED_FIELD", { label: field.label });
       }
 
-      const existing = requirementsByKey.get(field.key);
-      if (existing) {
-        existing.required = existing.required || field.required;
-        if (!existing.requiredByTemplateIds.includes(template.id)) {
-          existing.requiredByTemplateIds.push(template.id);
-        }
-        continue;
-      }
-
-      requirementsByKey.set(field.key, {
+      const requirement: FieldRequirement = {
         fieldDefinitionId: definition._id.toString(),
         key: field.key,
         label: definition.label,
@@ -58,7 +68,16 @@ export async function getRequirements(templateIds: string[]): Promise<Generation
         scope: definition.scope,
         required: field.required,
         requiredByTemplateIds: [template.id],
-      });
+      };
+      mergeRequirement(requirementsByKey, requirement);
+      if (definition.scope === "person") {
+        if (field.partyRole !== "seller") {
+          mergeRequirement(buyerRequirementsByKey, requirement);
+        }
+        if (field.partyRole !== "buyer") {
+          mergeRequirement(sellerRequirementsByKey, requirement);
+        }
+      }
     }
   }
 
@@ -67,6 +86,8 @@ export async function getRequirements(templateIds: string[]): Promise<Generation
 
   return {
     personFields: grouped("person"),
+    buyerFields: [...buyerRequirementsByKey.values()],
+    sellerFields: [...sellerRequirementsByKey.values()],
     propertyFields: grouped("property"),
     transactionFields: grouped("transaction"),
   };

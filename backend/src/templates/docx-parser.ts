@@ -1,7 +1,7 @@
 import { DOMParser } from "@xmldom/xmldom";
 import PizZip from "pizzip";
 import { parseInstruction } from "./instruction-parser.js";
-import type { RepeatSection, TemplateFieldRequirement } from "../types.js";
+import type { PartyRole, RepeatSection, TemplateFieldRequirement } from "../types.js";
 
 export interface ParsedDocx {
   fields: TemplateFieldRequirement[];
@@ -9,6 +9,12 @@ export interface ParsedDocx {
   errors: string[];
 }
 const contentParts = /^word\/(document|header\d+|footer\d+)\.xml$/;
+
+function detectPartyRole(label: string): PartyRole | undefined {
+  if (/קונ(?:ה|ים)/u.test(label)) return "buyer";
+  if (/מוכר(?:ת|ים|ות)?/u.test(label)) return "seller";
+  return undefined;
+}
 
 export function getContentPartNames(zip: PizZip): string[] {
   return Object.keys(zip.files).filter((name) => contentParts.test(name));
@@ -43,14 +49,18 @@ export function parseDocx(buffer: Buffer): ParsedDocx {
       for (const match of text.matchAll(/X([^X]+)X/gu)) {
         const parsed = parseInstruction(match[1]!);
         if (parsed.error) errors.push(parsed.error);
-        if (parsed.marker) markers.add(parsed.marker);
-        else if (parsed.instruction)
+        if (parsed.marker) {
+          markers.add(parsed.marker);
+        } else if (parsed.instruction) {
+          const partyRole = detectPartyRole(parsed.label);
           fields.push({
             raw: match[0],
             label: parsed.label,
             ...parsed.instruction,
             classified: false,
+            ...(partyRole ? { partyRole } : {}),
           });
+        }
       }
     }
   }

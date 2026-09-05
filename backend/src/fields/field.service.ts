@@ -82,12 +82,33 @@ export async function ensureKnownFields(): Promise<void> {
       {
         $setOnInsert: {
           ...item,
-          classified: true,
+          classified: false,
           searchable: item.searchable ?? false,
           filterable: false,
         },
       },
       { upsert: true },
+    );
+  }
+}
+
+export async function resetFieldClassifications(): Promise<void> {
+  const knownKeys = known.map((field) => field.key);
+  await FieldDefinitionModel.updateMany(
+    { key: { $nin: knownKeys } },
+    { $set: { classified: false }, $unset: { scope: 1 } },
+  );
+  for (const field of known) {
+    await FieldDefinitionModel.updateOne(
+      { key: field.key },
+      {
+        $set: {
+          scope: field.scope,
+          type: field.type,
+          searchable: field.searchable ?? false,
+          classified: false,
+        },
+      },
     );
   }
 }
@@ -112,6 +133,7 @@ export async function resolveTemplateFields(fields: TemplateFieldRequirement[]):
       definitions.push(definition);
     }
     field.key = definition.key;
+    field.label = definition.label;
     if (definition.scope) field.scope = definition.scope;
     field.type = definition.type;
     field.classified = definition.classified;
