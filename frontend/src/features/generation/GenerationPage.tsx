@@ -1,16 +1,29 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import {
+  useFieldArray,
+  useForm,
+  type FieldArrayWithId,
+  type FieldErrors,
+  type FieldPath,
+  type UseFieldArrayRemove,
+  type UseFormRegister,
+} from "react-hook-form";
+import { z } from "zod";
 import { api, ApiError, download } from "../../shared/api";
-import type { Requirements, Template } from "../../types";
+import { requirementsSchema, templateSchema, type FieldRequirement } from "../../types";
 import { DynamicField } from "./DynamicField";
 
-type FormData = {
-  buyers: Array<{ values: Record<string, string> }>;
-  sellers: Array<{ values: Record<string, string> }>;
+interface FormData {
+  buyers: { values: Record<string, string> }[];
+  sellers: { values: Record<string, string> }[];
   property: { values: Record<string, string> };
   transactionValues: Record<string, string>;
-};
+}
+type PartyPrefix = "buyers" | "sellers";
+type PartyItem = FieldArrayWithId<FormData, PartyPrefix, "id">;
+
+const templateListSchema = z.array(templateSchema);
 const errorMessages: Record<string, string> = {
   MISSING_FIELDS: "יש להשלים את שדות החובה.",
   TEMPLATE_INVALID: "אחת התבניות דורשת תיקון.",
@@ -23,12 +36,12 @@ export function GenerationPage() {
   const [serverError, setServerError] = useState("");
   const templates = useQuery({
     queryKey: ["templates"],
-    queryFn: () => api<Template[]>("/templates"),
+    queryFn: () => api("/templates", templateListSchema),
   });
   const requirements = useQuery({
     queryKey: ["requirements", selected],
     queryFn: () =>
-      api<Requirements>("/generation/requirements", {
+      api("/generation/requirements", requirementsSchema, {
         method: "POST",
         body: JSON.stringify({ templateIds: selected }),
       }),
@@ -50,6 +63,7 @@ export function GenerationPage() {
   });
   const buyers = useFieldArray({ control, name: "buyers" });
   const sellers = useFieldArray({ control, name: "sellers" });
+  const selectionKey = selected.join("|");
   useEffect(() => {
     reset({
       buyers: [{ values: {} }],
@@ -57,7 +71,7 @@ export function GenerationPage() {
       property: { values: {} },
       transactionValues: {},
     });
-  }, [selected.join("|"), reset]);
+  }, [selectionKey, reset]);
   const generation = useMutation({
     mutationFn: (data: FormData) =>
       download("/generation/generate", { templateIds: selected, ...data }),
@@ -70,9 +84,6 @@ export function GenerationPage() {
     onSuccess: () => setServerError(""),
   });
   const req = requirements.data;
-  const fieldError = (path: string) =>
-    path.split(".").reduce<any>((value, key) => value?.[key], errors)
-      ?.message as string | undefined;
   return (
     <section>
       <div className="pageTitle">
@@ -105,11 +116,9 @@ export function GenerationPage() {
             className="link"
             onClick={() =>
               setSelected(
-                selected.length ===
-                  (templates.data?.filter((t) => t.valid).length ?? 0)
+                selected.length === (templates.data?.filter((t) => t.valid).length ?? 0)
                   ? []
-                  : (templates.data?.filter((t) => t.valid).map((t) => t.id) ??
-                      []),
+                  : (templates.data?.filter((t) => t.valid).map((t) => t.id) ?? []),
               )
             }
           >
@@ -121,27 +130,19 @@ export function GenerationPage() {
         ) : templates.data?.length === 0 ? (
           <div className="empty">
             <strong>לא נמצאו תבניות מסמכים</strong>
-            <p>
-              יש להוסיף קבצי DOCX לתיקיית templates של המערכת ולהעלות את
-              השינויים ל-Git.
-            </p>
+            <p>יש להוסיף קבצי DOCX לתיקיית templates של המערכת ולהעלות את השינויים ל-Git.</p>
           </div>
         ) : (
           <div className="templateGrid">
             {templates.data?.map((t) => (
-              <label
-                className={`choice ${!t.valid ? "disabled" : ""}`}
-                key={t.id}
-              >
+              <label className={`choice ${!t.valid ? "disabled" : ""}`} key={t.id}>
                 <input
                   type="checkbox"
                   disabled={!t.valid}
                   checked={selected.includes(t.id)}
                   onChange={() =>
                     setSelected((v) =>
-                      v.includes(t.id)
-                        ? v.filter((id) => id !== t.id)
-                        : [...v, t.id],
+                      v.includes(t.id) ? v.filter((id) => id !== t.id) : [...v, t.id],
                     )
                   }
                 />
@@ -158,8 +159,7 @@ export function GenerationPage() {
       {requirements.error && (
         <div className="errorPanel">
           {requirements.error instanceof ApiError
-            ? (errorMessages[requirements.error.code] ??
-              "לא ניתן לטעון את דרישות התבנית.")
+            ? (errorMessages[requirements.error.code] ?? "לא ניתן לטעון את דרישות התבנית.")
             : "לא ניתן לטעון את דרישות התבנית."}
         </div>
       )}
@@ -175,7 +175,7 @@ export function GenerationPage() {
             fields={req.personFields}
             prefix="buyers"
             register={register}
-            fieldError={fieldError}
+            errors={errors}
           />
           <PartySection
             title="מוכרים"
@@ -187,7 +187,7 @@ export function GenerationPage() {
             fields={req.personFields}
             prefix="sellers"
             register={register}
-            fieldError={fieldError}
+            errors={errors}
           />
           <div className="card">
             <div className="sectionHeading">
@@ -203,7 +203,7 @@ export function GenerationPage() {
                   field={f}
                   name={`property.values.${f.key}`}
                   register={register}
-                  error={fieldError(`property.values.${f.key}`)}
+                  error={errors.property?.values?.[f.key]?.message}
                 />
               ))}
             </div>
@@ -222,22 +222,31 @@ export function GenerationPage() {
                   field={f}
                   name={`transactionValues.${f.key}`}
                   register={register}
-                  error={fieldError(`transactionValues.${f.key}`)}
+                  error={errors.transactionValues?.[f.key]?.message}
                 />
               ))}
             </div>
           </div>
-          <button
-            className="primary wide"
-            type="submit"
-            disabled={generation.isPending}
-          >
+          <button className="primary wide" type="submit" disabled={generation.isPending}>
             הפקת מסמכים והורדה
           </button>
         </form>
       )}
     </section>
   );
+}
+
+interface PartySectionProps {
+  title: string;
+  step: string;
+  singular: string;
+  items: PartyItem[];
+  append: () => void;
+  remove: UseFieldArrayRemove;
+  fields: FieldRequirement[];
+  prefix: PartyPrefix;
+  register: UseFormRegister<FormData>;
+  errors: FieldErrors<FormData>;
 }
 
 function PartySection({
@@ -250,8 +259,8 @@ function PartySection({
   fields,
   prefix,
   register,
-  fieldError,
-}: any) {
+  errors,
+}: PartySectionProps) {
   return (
     <div className="card">
       <div className="sectionHeading">
@@ -263,32 +272,32 @@ function PartySection({
           הוספת {singular}
         </button>
       </div>
-      {items.map((item: any, index: number) => (
+      {items.map((item, index) => (
         <div className="party" key={item.id}>
           <div className="partyTitle">
             <h3>
               {singular} {index + 1}
             </h3>
             {items.length > 1 && (
-              <button
-                type="button"
-                className="dangerLink"
-                onClick={() => remove(index)}
-              >
+              <button type="button" className="dangerLink" onClick={() => remove(index)}>
                 הסרה
               </button>
             )}
           </div>
           <div className="fields">
-            {fields.map((field: any) => (
-              <DynamicField
-                key={field.key}
-                field={field}
-                name={`${prefix}.${index}.values.${field.key}`}
-                register={register}
-                error={fieldError(`${prefix}.${index}.values.${field.key}`)}
-              />
-            ))}
+            {fields.map((field) => {
+              const name = `${prefix}.${index}.values.${field.key}` as FieldPath<FormData>;
+              const error = errors[prefix]?.[index]?.values?.[field.key]?.message;
+              return (
+                <DynamicField
+                  key={field.key}
+                  field={field}
+                  name={name}
+                  register={register}
+                  error={error}
+                />
+              );
+            })}
           </div>
         </div>
       ))}

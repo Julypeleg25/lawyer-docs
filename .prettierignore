@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+coverage
+.git
+.inspection
+/templates
+*.docx
+package-lock.json

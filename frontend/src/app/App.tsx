@@ -23,11 +23,7 @@ export function App() {
         </div>
         <nav aria-label="ניווט ראשי">
           {tabs.map(([key, label]) => (
-            <button
-              key={key}
-              className={tab === key ? "active" : ""}
-              onClick={() => setTab(key)}
-            >
+            <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
               {label}
             </button>
           ))}

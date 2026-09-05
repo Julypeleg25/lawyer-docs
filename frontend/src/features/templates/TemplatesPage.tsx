@@ -1,24 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { api } from "../../shared/api";
-import type { FieldDefinition, Template } from "../../types";
+import { fieldDefinitionSchema, templateSchema } from "../../types";
+
+const templateListSchema = z.array(templateSchema);
+const fieldDefinitionListSchema = z.array(fieldDefinitionSchema);
+type FieldScope = "person" | "property" | "transaction";
 
 export function TemplatesPage() {
   const client = useQueryClient();
   const templates = useQuery({
     queryKey: ["templates"],
-    queryFn: () => api<Template[]>("/templates"),
+    queryFn: () => api("/templates", templateListSchema),
   });
   const fields = useQuery({
     queryKey: ["fields"],
-    queryFn: () => api<FieldDefinition[]>("/fields"),
+    queryFn: () => api("/fields", fieldDefinitionListSchema),
   });
   const refresh = useMutation({
-    mutationFn: () => api("/templates/refresh", { method: "POST" }),
+    mutationFn: () => api("/templates/refresh", templateListSchema, { method: "POST" }),
     onSuccess: () => client.invalidateQueries(),
   });
   const classify = useMutation({
-    mutationFn: ({ id, scope }: { id: string; scope: string }) =>
-      api(`/fields/${id}`, {
+    mutationFn: ({ id, scope }: { id: string; scope: FieldScope }) =>
+      api(`/fields/${id}`, fieldDefinitionSchema, {
         method: "PATCH",
         body: JSON.stringify({ scope, type: "text" }),
       }),
@@ -32,11 +37,7 @@ export function TemplatesPage() {
           <h1>תבניות המסמכים</h1>
           <p>התבניות נקראות מתיקיית Git ואינן ניתנות לעריכה באתר.</p>
         </div>
-        <button
-          className="primary"
-          onClick={() => refresh.mutate()}
-          disabled={refresh.isPending}
-        >
+        <button className="primary" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
           רענון תבניות
         </button>
       </div>
@@ -79,25 +80,13 @@ export function TemplatesPage() {
               </div>
               <div>
                 <span>שיוך:</span>
-                <button
-                  onClick={() =>
-                    classify.mutate({ id: f._id, scope: "person" })
-                  }
-                >
+                <button onClick={() => classify.mutate({ id: f._id, scope: "person" })}>
                   לקוח
                 </button>
-                <button
-                  onClick={() =>
-                    classify.mutate({ id: f._id, scope: "property" })
-                  }
-                >
+                <button onClick={() => classify.mutate({ id: f._id, scope: "property" })}>
                   נכס
                 </button>
-                <button
-                  onClick={() =>
-                    classify.mutate({ id: f._id, scope: "transaction" })
-                  }
-                >
+                <button onClick={() => classify.mutate({ id: f._id, scope: "transaction" })}>
                   עסקה
                 </button>
               </div>

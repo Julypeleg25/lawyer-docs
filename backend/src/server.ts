@@ -6,8 +6,13 @@ import { ensureKnownFields } from "./fields/field.service.js";
 import { logger } from "./logger.js";
 import { scanTemplates } from "./templates/template-scanner.js";
 
-async function main() {
-  await mongoose.connect(config.MONGODB_URI); await ensureKnownFields(); await scanTemplates();
+async function main(): Promise<void> {
+  await mongoose.connect(config.MONGODB_URI);
+  await ensureKnownFields();
+  await scanTemplates();
   app.listen(config.PORT, () => logger.info({ port: config.PORT }, "server listening"));
 }
-main().catch((error) => { logger.fatal({ error }, "server startup failed"); process.exitCode = 1; });
+main().catch((error) => {
+  logger.fatal({ error }, "server startup failed");
+  process.exitCode = 1;
+});

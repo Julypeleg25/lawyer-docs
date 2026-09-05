@@ -1,21 +1,21 @@
 import type { FieldRequirement } from "../../types";
-import type { UseFormRegister } from "react-hook-form";
+import type { FieldPath, FieldValues, UseFormRegister } from "react-hook-form";
 
-export function DynamicField({
+interface DynamicFieldProps<TFormValues extends FieldValues> {
+  field: FieldRequirement;
+  name: FieldPath<TFormValues>;
+  register: UseFormRegister<TFormValues>;
+  error?: string | undefined;
+}
+
+export function DynamicField<TFormValues extends FieldValues>({
   field,
   name,
   register,
   error,
-}: {
-  field: FieldRequirement;
-  name: string;
-  register: UseFormRegister<any>;
-  error?: string;
-}) {
+}: DynamicFieldProps<TFormValues>) {
   const rules = field.required ? { required: "שדה חובה" } : undefined;
-  const ltr = ["idNumber", "number", "money", "percentage", "date"].includes(
-    field.type,
-  );
+  const ltr = ["idNumber", "number", "money", "percentage", "date"].includes(field.type);
   return (
     <label className={error ? "field invalid" : "field"}>
       <span>
@@ -32,9 +32,7 @@ export function DynamicField({
           type={
             field.type === "date"
               ? "date"
-              : field.type === "number" ||
-                  field.type === "money" ||
-                  field.type === "percentage"
+              : field.type === "number" || field.type === "money" || field.type === "percentage"
                 ? "number"
                 : "text"
           }
