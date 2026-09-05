@@ -512,6 +512,117 @@ nav button:hover .navIcon {
 .templateCard {
   margin: 0;
 }
+.templateFieldDetails {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.templateFieldDetails summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--primary);
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+.templateFieldDetails summary::-webkit-details-marker {
+  display: none;
+}
+.templateFieldDetails summary::before {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+.templateFieldDetails[open] summary::before {
+  transform: rotate(-45deg);
+}
+.templateFieldDetails summary > span:first-child {
+  flex: 1;
+}
+.fieldCount {
+  min-width: 28px;
+  border-radius: 14px;
+  padding: 3px 8px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 12px;
+}
+.templateFieldList {
+  display: flex;
+  max-height: 360px;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  list-style: none;
+}
+.templateFieldList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--surface-secondary);
+}
+.templateFieldList li:last-child {
+  border-bottom: 0;
+}
+.templateFieldIdentity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.templateFieldIdentity code {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.templateFieldMeta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.fieldTag {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 7px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.fieldTag.required {
+  border-color: #c7d0dc;
+  background: #eef2f6;
+  color: var(--primary);
+}
+.fieldTag.role {
+  border-color: #bed0df;
+  background: #f1f6fa;
+  color: var(--info);
+}
+.fieldTag.warning {
+  border-color: #e6cda2;
+  background: #fff9ed;
+  color: var(--warning);
+}
 .badge {
   padding: 5px 10px;
   border-radius: 20px;
@@ -931,6 +1042,13 @@ dd {
   }
   .card {
     padding: 18px;
+  }
+  .templateFieldList li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .templateFieldMeta {
+    justify-content: flex-start;
   }
   .sectionHeading,
   .partyTitle {

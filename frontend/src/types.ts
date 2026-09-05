@@ -37,8 +37,14 @@ export const templateSchema = z.object({
   hash: z.string(),
   fields: z.array(
     z.object({
+      raw: z.string(),
       key: z.string().optional(),
       label: z.string(),
+      required: z.boolean(),
+      classified: z.boolean(),
+      scope: z.enum(["person", "property", "transaction"]).optional(),
+      type: fieldTypeSchema.optional(),
+      partyRole: z.enum(["buyer", "seller"]).optional(),
     }),
   ),
   valid: z.boolean(),

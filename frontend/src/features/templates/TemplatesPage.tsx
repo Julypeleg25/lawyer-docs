@@ -34,6 +34,10 @@ const scopeLabels: Record<FieldScope, string> = {
   property: "נכס",
   transaction: "עסקה",
 };
+const partyRoleLabels = {
+  buyer: "קונה",
+  seller: "מוכר",
+} as const;
 const typeLabels: Record<FieldType, string> = {
   text: "טקסט",
   textarea: "טקסט ארוך",
@@ -184,6 +188,41 @@ export function TemplatesPage() {
                 {error}
               </p>
             ))}
+            <details className="templateFieldDetails">
+              <summary>
+                <span>הצגת השדות בתבנית</span>
+                <span className="fieldCount">{template.fields.length}</span>
+              </summary>
+              {template.fields.length === 0 ? (
+                <p className="muted">לא התגלו שדות בתבנית זו.</p>
+              ) : (
+                <ol className="templateFieldList">
+                  {template.fields.map((field, index) => (
+                    <li key={`${field.raw}-${index}`}>
+                      <div className="templateFieldIdentity">
+                        <strong>{field.label}</strong>
+                        <code dir="rtl">{field.raw}</code>
+                      </div>
+                      <div className="templateFieldMeta">
+                        <span className={field.required ? "fieldTag required" : "fieldTag"}>
+                          {field.required ? "חובה" : "רשות"}
+                        </span>
+                        {field.partyRole && (
+                          <span className="fieldTag role">{partyRoleLabels[field.partyRole]}</span>
+                        )}
+                        {field.scope && (
+                          <span className="fieldTag">{scopeLabels[field.scope]}</span>
+                        )}
+                        {field.type && <span className="fieldTag">{typeLabels[field.type]}</span>}
+                        {!field.classified && (
+                          <span className="fieldTag warning">ממתין לסיווג</span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </details>
           </article>
         ))}
       </div>
