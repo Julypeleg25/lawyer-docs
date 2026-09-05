@@ -49,7 +49,12 @@ router.post("/generation/requirements", asyncRoute(async (req, res) => res.json(
 router.post("/generation/generate", asyncRoute(async (req, res) => {
   const body = generationInput.parse(req.body); const templates = body.templateIds.map((templateId) => templateRegistry.get(templateId));
   if (templates.some((item) => !item)) throw new AppError(409, "TEMPLATE_CHANGED"); if (templates.some((item) => !item!.valid)) throw new AppError(422, "TEMPLATE_INVALID");
-  const mergedValues = { ...body.property.values, ...body.transactionValues, ...(body.buyers[0]?.values ?? {}), ...(body.sellers[0]?.values ?? {}) }; validateValues(templates as any, mergedValues);
+  const mergedValues = { ...body.property.values, ...body.transactionValues, ...(body.buyers[0]?.values ?? {}), ...(body.sellers[0]?.values ?? {}) };
+  const nonPersonTemplates = templates.map((template) => ({ ...template!, fields: template!.fields.filter((field) => field.scope !== "person") })); validateValues(nonPersonTemplates, mergedValues);
+  const personFields = [...new Map(templates.flatMap((template) => template!.fields.filter((field) => field.scope === "person" && field.required)).map((field) => [field.key, field])).values()];
+  const missingParties: Array<{ group: "buyers" | "sellers"; index: number; key: string; label: string }> = [];
+  for (const [group, parties] of [["buyers", body.buyers], ["sellers", body.sellers]] as const) for (const [index, party] of parties.entries()) for (const field of personFields) if (party.values[field.key!] === undefined || party.values[field.key!] === null || party.values[field.key!] === "") missingParties.push({ group, index, key: field.key!, label: field.label });
+  if (missingParties.length) throw new AppError(422, "MISSING_FIELDS", { fields: missingParties });
   const outputs = await Promise.all(templates.map(async (template) => ({ name: template!.filename, buffer: generateDocument({ templateBuffer: await readFile(template!.absolutePath), templateDefinition: template!, values: mergedValues, buyers: body.buyers.map((party) => party.values), sellers: body.sellers.map((party) => party.values) }) })));
   if (outputs.length === 1) { res.type("application/vnd.openxmlformats-officedocument.wordprocessingml.document").attachment(outputs[0]!.name).send(outputs[0]!.buffer); return; }
   const zip = new PizZip(); for (const output of outputs) zip.file(output.name, output.buffer); res.type("application/zip").attachment("מסמכי עסקה.zip").send(zip.generate({ type: "nodebuffer", compression: "DEFLATE" }));
