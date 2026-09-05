@@ -339,6 +339,51 @@ nav button:hover .navIcon {
   opacity: 0.65;
   background: var(--surface-secondary);
 }
+.documentWorkspace {
+  border-top: 3px solid var(--primary);
+}
+.documentWorkspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.documentWorkspaceHeader h2 {
+  margin: 3px 0 6px;
+  color: var(--text-primary);
+}
+.documentWorkspaceHeader p:not(.eyebrow) {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.documentTabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-top: 20px;
+  padding: 5px;
+  border-radius: 9px;
+  background: var(--surface-secondary);
+}
+.documentTabs button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.documentTabs button:hover {
+  color: var(--primary);
+}
+.documentTabs button.active {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 4px #18253a12;
+}
 .fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -350,8 +395,40 @@ nav button:hover .navIcon {
   flex-direction: column;
   gap: 6px;
 }
-.field span {
+.fieldHeader {
+  display: flex;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.fieldHeader label {
   font-weight: 650;
+}
+.fieldClear,
+.sectionReset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 3px 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.fieldClear:hover,
+.sectionReset:hover {
+  color: var(--error);
+}
+.fieldClear svg {
+  width: 14px;
+  height: 14px;
+}
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .field em {
   color: var(--error);
@@ -737,6 +814,10 @@ dd {
   .pageTitle h1 {
     font-size: 30px;
   }
+  .documentWorkspaceHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
   .classification {
     align-items: flex-start;
     gap: 14px;
@@ -779,6 +860,13 @@ dd {
   .partyTitle {
     align-items: flex-start;
     gap: 12px;
+  }
+  .sectionHeading {
+    flex-wrap: wrap;
+  }
+  .sectionActions {
+    width: 100%;
+    justify-content: space-between;
   }
   .fields,
   .templateGrid,

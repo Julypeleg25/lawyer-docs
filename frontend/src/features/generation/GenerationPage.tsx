@@ -14,18 +14,34 @@ import { ConfirmDialog } from "../../shared/ConfirmDialog";
 import { requirementsSchema, templateSchema, type FieldRequirement } from "../../types";
 import { DynamicField } from "./DynamicField";
 
+type FormValue = string | boolean;
 interface FormData {
-  buyers: { values: Record<string, string> }[];
-  sellers: { values: Record<string, string> }[];
-  property: { values: Record<string, string> };
-  transactionValues: Record<string, string>;
+  buyers: { values: Record<string, FormValue> }[];
+  sellers: { values: Record<string, FormValue> }[];
+  property: { values: Record<string, FormValue> };
+  transactionValues: Record<string, FormValue>;
 }
 type PartyPrefix = "buyers" | "sellers";
 type PartyItem = FieldArrayWithId<FormData, PartyPrefix, "id">;
+type FormValuePath =
+  | `buyers.${number}.values.${string}`
+  | `sellers.${number}.values.${string}`
+  | `property.values.${string}`
+  | `transactionValues.${string}`;
+interface ClearTarget {
+  path: FormValuePath;
+  emptyValue: FormValue;
+}
+interface ConfirmationCopy {
+  title: string;
+  description: string;
+  confirmLabel: string;
+}
 type PendingAction =
   | { type: "reset" }
   | { type: "templates"; selection: string[] }
-  | { type: "removeParty"; prefix: PartyPrefix; index: number };
+  | { type: "removeParty"; prefix: PartyPrefix; index: number }
+  | { type: "clearFields"; targets: ClearTarget[]; copy: ConfirmationCopy };
 
 const templateListSchema = z.array(templateSchema);
 const errorMessages: Record<string, string> = {
@@ -41,12 +57,15 @@ const createDefaultValues = (): FormData => ({
   property: { values: {} },
   transactionValues: {},
 });
+const hasEnteredValue = (value: FormValue | undefined): boolean =>
+  value !== undefined && value !== "" && value !== false;
 
 export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boolean) => void }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [serverError, setServerError] = useState("");
   const [isCurrentDraftGenerated, setIsCurrentDraftGenerated] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const templates = useQuery({
     queryKey: ["templates"],
     queryFn: () => api("/templates", templateListSchema),
@@ -67,6 +86,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     formState: { errors, isDirty },
     getValues,
     reset,
+    setValue,
   } = useForm<FormData>({
     defaultValues: createDefaultValues(),
   });
@@ -103,8 +123,18 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     },
   });
   const req = requirements.data;
+  const selectedTemplates =
+    templates.data?.filter((template) => selected.includes(template.id)) ?? [];
+  const activeTemplate = activeTemplateId
+    ? selectedTemplates.find((template) => template.id === activeTemplateId)
+    : undefined;
+  const visibleFields = (fields: FieldRequirement[]): FieldRequirement[] =>
+    activeTemplateId
+      ? fields.filter((field) => field.requiredByTemplateIds.includes(activeTemplateId))
+      : fields;
   const applyTemplateSelection = (nextSelection: string[]): void => {
     setSelected(nextSelection);
+    setActiveTemplateId((current) => (current && nextSelection.includes(current) ? current : null));
     setServerError("");
     setIsCurrentDraftGenerated(false);
     generation.reset();
@@ -136,11 +166,82 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
   };
   const removeParty = (prefix: PartyPrefix, index: number): void => {
     const partyValues = getValues(`${prefix}.${index}.values`);
-    if (Object.values(partyValues).some((value) => value !== "")) {
+    if (Object.values(partyValues).some(hasEnteredValue)) {
       setPendingAction({ type: "removeParty", prefix, index });
       return;
     }
     applyRemoveParty(prefix, index);
+  };
+  const createClearTarget = (path: FormValuePath, field: FieldRequirement): ClearTarget => ({
+    path,
+    emptyValue: field.type === "boolean" ? false : "",
+  });
+  const createSectionTargets = (
+    section: "buyers" | "sellers" | "property" | "transaction",
+    fields: FieldRequirement[],
+  ): ClearTarget[] => {
+    if (section === "buyers") {
+      return buyers.fields.flatMap((_buyer, index) =>
+        fields.map((field) => createClearTarget(`buyers.${index}.values.${field.key}`, field)),
+      );
+    }
+    if (section === "sellers") {
+      return sellers.fields.flatMap((_seller, index) =>
+        fields.map((field) => createClearTarget(`sellers.${index}.values.${field.key}`, field)),
+      );
+    }
+    if (section === "property") {
+      return fields.map((field) => createClearTarget(`property.values.${field.key}`, field));
+    }
+    return fields.map((field) => createClearTarget(`transactionValues.${field.key}`, field));
+  };
+  const requestClearFields = (targets: ClearTarget[], copy: ConfirmationCopy): void => {
+    const populatedTargets = targets.filter(({ path }) => {
+      const value = getValues(path);
+      return hasEnteredValue(value);
+    });
+    if (populatedTargets.length === 0) return;
+    setPendingAction({ type: "clearFields", targets: populatedTargets, copy });
+  };
+  const requestSectionReset = (
+    section: "buyers" | "sellers" | "property" | "transaction",
+    label: string,
+    fields: FieldRequirement[],
+  ): void => {
+    requestClearFields(createSectionTargets(section, fields), {
+      title: `לנקות את אזור ${label}?`,
+      description: "רק הנתונים באזור זה יימחקו. בחירת המסמכים ושאר הטופס יישארו ללא שינוי.",
+      confirmLabel: "ניקוי האזור",
+    });
+  };
+  const requestFieldReset = (target: ClearTarget, label: string): void => {
+    requestClearFields([target], {
+      title: `לנקות את השדה „${label}”?`,
+      description: "הערך בשדה זה בלבד יימחק. יתר הטופס יישאר ללא שינוי.",
+      confirmLabel: "ניקוי השדה",
+    });
+  };
+  const requestDocumentReset = (): void => {
+    if (!req) return;
+    const buyerFields = visibleFields(req.buyerFields);
+    const sellerFields = visibleFields(req.sellerFields);
+    const propertyFields = visibleFields(req.propertyFields);
+    const transactionFields = visibleFields(req.transactionFields);
+    const targets = [
+      ...createSectionTargets("buyers", buyerFields),
+      ...createSectionTargets("sellers", sellerFields),
+      ...createSectionTargets("property", propertyFields),
+      ...createSectionTargets("transaction", transactionFields),
+    ];
+    requestClearFields(targets, {
+      title: activeTemplate
+        ? `לנקות את שדות „${activeTemplate.displayName}”?`
+        : "לנקות את כל השדות?",
+      description: activeTemplate
+        ? "כל הערכים המשמשים מסמך זה יימחקו. שדות משותפים עשויים להידרש גם במסמכים אחרים."
+        : "כל הערכים שהוזנו יימחקו, אך בחירת המסמכים תישאר ללא שינוי.",
+      confirmLabel: activeTemplate ? "ניקוי שדות המסמך" : "ניקוי כל השדות",
+    });
   };
   const confirmPendingAction = (): void => {
     if (!pendingAction) return;
@@ -149,10 +250,22 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     if (pendingAction.type === "removeParty") {
       applyRemoveParty(pendingAction.prefix, pendingAction.index);
     }
+    if (pendingAction.type === "clearFields") {
+      for (const target of pendingAction.targets) {
+        setValue(target.path, target.emptyValue, {
+          shouldDirty: true,
+          shouldTouch: true,
+          shouldValidate: true,
+        });
+      }
+      setServerError("");
+      setIsCurrentDraftGenerated(false);
+      generation.reset();
+    }
     setPendingAction(null);
   };
 
-  const confirmationCopy =
+  const confirmationCopy: ConfirmationCopy =
     pendingAction?.type === "reset"
       ? {
           title: "לאפס את הטופס?",
@@ -165,11 +278,13 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             description: "שינוי המסמכים עשוי לשנות את שדות החובה. המידע שכבר הוזן יישאר בטופס.",
             confirmLabel: "שינוי המסמכים",
           }
-        : {
-            title: "להסיר את הצד?",
-            description: "הפרטים שהוזנו עבור צד זה יימחקו ולא ניתן יהיה לשחזר אותם.",
-            confirmLabel: "הסרת הצד",
-          };
+        : pendingAction?.type === "clearFields"
+          ? pendingAction.copy
+          : {
+              title: "להסיר את הצד?",
+              description: "הפרטים שהוזנו עבור צד זה יימחקו ולא ניתן יהיה לשחזר אותם.",
+              confirmLabel: "הסרת הצד",
+            };
 
   return (
     <section className="generationPage">
@@ -187,7 +302,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             disabled={!isDirty && selected.length === 0}
             onClick={resetForm}
           >
-            איפוס טופס
+            איפוס מלא
           </button>
         </div>
       </div>
@@ -264,7 +379,49 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
         </div>
       )}
       {req && (
-        <form onSubmit={handleSubmit((data) => generation.mutate(data))}>
+        <form
+          onSubmit={handleSubmit(
+            (data) => generation.mutate(data),
+            () => setActiveTemplateId(null),
+          )}
+        >
+          <div className="card documentWorkspace">
+            <div className="documentWorkspaceHeader">
+              <div>
+                <p className="eyebrow">חלוקה לפי מסמך</p>
+                <h2>{activeTemplate?.displayName ?? "כל המסמכים שנבחרו"}</h2>
+                <p>
+                  {activeTemplate
+                    ? "מוצגים רק השדות הדרושים למסמך זה. שדות משותפים נשמרים גם במעבר בין מסמכים."
+                    : "מוצגים כל השדות הנדרשים, ללא כפילויות בין המסמכים."}
+                </p>
+              </div>
+              <button type="button" className="secondary" onClick={requestDocumentReset}>
+                {activeTemplate ? "ניקוי שדות המסמך" : "ניקוי כל השדות"}
+              </button>
+            </div>
+            <div className="documentTabs" aria-label="הצגת שדות לפי מסמך">
+              <button
+                type="button"
+                aria-pressed={activeTemplateId === null}
+                className={activeTemplateId === null ? "active" : ""}
+                onClick={() => setActiveTemplateId(null)}
+              >
+                כל המסמכים
+              </button>
+              {selectedTemplates.map((template) => (
+                <button
+                  type="button"
+                  aria-pressed={activeTemplateId === template.id}
+                  className={activeTemplateId === template.id ? "active" : ""}
+                  key={template.id}
+                  onClick={() => setActiveTemplateId(template.id)}
+                >
+                  {template.displayName}
+                </button>
+              ))}
+            </div>
+          </div>
           <PartySection
             title="קונים"
             step="2"
@@ -272,10 +429,14 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             items={buyers.fields}
             append={() => buyers.append({ values: {} })}
             remove={(index) => removeParty("buyers", index)}
-            fields={req.buyerFields}
+            fields={visibleFields(req.buyerFields)}
             prefix="buyers"
             register={register}
             errors={errors}
+            onReset={(fields) => requestSectionReset("buyers", "קונים", fields)}
+            onClearField={(path, field) =>
+              requestFieldReset(createClearTarget(path, field), field.label)
+            }
           />
           <PartySection
             title="מוכרים"
@@ -284,49 +445,85 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             items={sellers.fields}
             append={() => sellers.append({ values: {} })}
             remove={(index) => removeParty("sellers", index)}
-            fields={req.sellerFields}
+            fields={visibleFields(req.sellerFields)}
             prefix="sellers"
             register={register}
             errors={errors}
+            onReset={(fields) => requestSectionReset("sellers", "מוכרים", fields)}
+            onClearField={(path, field) =>
+              requestFieldReset(createClearTarget(path, field), field.label)
+            }
           />
-          <div className="card">
-            <div className="sectionHeading">
-              <div>
-                <span className="step">4</span>
-                <h2>נכס</h2>
+          {visibleFields(req.propertyFields).length > 0 && (
+            <div className="card">
+              <div className="sectionHeading">
+                <div>
+                  <span className="step">4</span>
+                  <h2>נכס</h2>
+                </div>
+                <button
+                  type="button"
+                  className="sectionReset"
+                  onClick={() =>
+                    requestSectionReset("property", "נכס", visibleFields(req.propertyFields))
+                  }
+                >
+                  ניקוי אזור
+                </button>
+              </div>
+              <div className="fields">
+                {visibleFields(req.propertyFields).map((f) => (
+                  <DynamicField
+                    key={f.key}
+                    field={f}
+                    name={`property.values.${f.key}`}
+                    register={register}
+                    error={errors.property?.values?.[f.key]?.message}
+                    onClear={() =>
+                      requestFieldReset(createClearTarget(`property.values.${f.key}`, f), f.label)
+                    }
+                  />
+                ))}
               </div>
             </div>
-            <div className="fields">
-              {req.propertyFields.map((f) => (
-                <DynamicField
-                  key={f.key}
-                  field={f}
-                  name={`property.values.${f.key}`}
-                  register={register}
-                  error={errors.property?.values?.[f.key]?.message}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="card">
-            <div className="sectionHeading">
-              <div>
-                <span className="step">5</span>
-                <h2>פרטי העסקה</h2>
+          )}
+          {visibleFields(req.transactionFields).length > 0 && (
+            <div className="card">
+              <div className="sectionHeading">
+                <div>
+                  <span className="step">5</span>
+                  <h2>פרטי העסקה</h2>
+                </div>
+                <button
+                  type="button"
+                  className="sectionReset"
+                  onClick={() =>
+                    requestSectionReset(
+                      "transaction",
+                      "פרטי העסקה",
+                      visibleFields(req.transactionFields),
+                    )
+                  }
+                >
+                  ניקוי אזור
+                </button>
+              </div>
+              <div className="fields">
+                {visibleFields(req.transactionFields).map((f) => (
+                  <DynamicField
+                    key={f.key}
+                    field={f}
+                    name={`transactionValues.${f.key}`}
+                    register={register}
+                    error={errors.transactionValues?.[f.key]?.message}
+                    onClear={() =>
+                      requestFieldReset(createClearTarget(`transactionValues.${f.key}`, f), f.label)
+                    }
+                  />
+                ))}
               </div>
             </div>
-            <div className="fields">
-              {req.transactionFields.map((f) => (
-                <DynamicField
-                  key={f.key}
-                  field={f}
-                  name={`transactionValues.${f.key}`}
-                  register={register}
-                  error={errors.transactionValues?.[f.key]?.message}
-                />
-              ))}
-            </div>
-          </div>
+          )}
           <div className="generationActions">
             <div>
               <strong>הפקה והורדה</strong>
@@ -334,7 +531,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             </div>
             <div>
               <button type="button" className="secondary" onClick={resetForm}>
-                איפוס טופס
+                איפוס מלא
               </button>
               <button className="primary" type="submit" disabled={generation.isPending}>
                 {generation.isPending ? "מפיק מסמכים…" : "הפקת מסמכים והורדה"}
@@ -367,6 +564,8 @@ interface PartySectionProps {
   prefix: PartyPrefix;
   register: UseFormRegister<FormData>;
   errors: FieldErrors<FormData>;
+  onReset: (fields: FieldRequirement[]) => void;
+  onClearField: (path: FormValuePath, field: FieldRequirement) => void;
 }
 
 function PartySection({
@@ -380,7 +579,11 @@ function PartySection({
   prefix,
   register,
   errors,
+  onReset,
+  onClearField,
 }: PartySectionProps) {
+  if (fields.length === 0) return null;
+
   return (
     <div className="card">
       <div className="sectionHeading">
@@ -388,9 +591,14 @@ function PartySection({
           <span className="step">{step}</span>
           <h2>{title}</h2>
         </div>
-        <button type="button" className="secondary" onClick={append}>
-          הוספת {singular}
-        </button>
+        <div className="sectionActions">
+          <button type="button" className="sectionReset" onClick={() => onReset(fields)}>
+            ניקוי אזור
+          </button>
+          <button type="button" className="secondary" onClick={append}>
+            הוספת {singular}
+          </button>
+        </div>
       </div>
       {items.map((item, index) => (
         <div className="party" key={item.id}>
@@ -415,6 +623,7 @@ function PartySection({
                   name={name}
                   register={register}
                   error={error}
+                  onClear={() => onClearField(name as FormValuePath, field)}
                 />
               );
             })}

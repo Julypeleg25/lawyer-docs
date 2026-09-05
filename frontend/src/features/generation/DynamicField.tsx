@@ -1,4 +1,5 @@
 import type { FieldRequirement } from "../../types";
+import { useId } from "react";
 import type { FieldPath, FieldValues, UseFormRegister } from "react-hook-form";
 
 interface DynamicFieldProps<TFormValues extends FieldValues> {
@@ -6,6 +7,7 @@ interface DynamicFieldProps<TFormValues extends FieldValues> {
   name: FieldPath<TFormValues>;
   register: UseFormRegister<TFormValues>;
   error?: string | undefined;
+  onClear?: (() => void) | undefined;
 }
 
 export function DynamicField<TFormValues extends FieldValues>({
@@ -13,21 +15,42 @@ export function DynamicField<TFormValues extends FieldValues>({
   name,
   register,
   error,
+  onClear,
 }: DynamicFieldProps<TFormValues>) {
+  const inputId = useId();
   const rules = field.required ? { required: "שדה חובה" } : undefined;
   const ltr = ["idNumber", "number", "money", "percentage", "date"].includes(field.type);
   return (
-    <label className={error ? "field invalid" : "field"}>
-      <span>
-        {field.label}
-        {field.required && <em> *</em>}
-      </span>
+    <div className={error ? "field invalid" : "field"}>
+      <div className="fieldHeader">
+        <label htmlFor={inputId}>
+          {field.label}
+          {field.required && <em> *</em>}
+        </label>
+        {onClear && (
+          <button type="button" className="fieldClear" onClick={onClear}>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m7 7 10 10M17 7 7 17" />
+            </svg>
+            <span>ניקוי</span>
+          </button>
+        )}
+      </div>
       {field.type === "textarea" ? (
-        <textarea {...register(name, rules)} />
+        <textarea id={inputId} {...register(name, rules)} />
       ) : field.type === "boolean" ? (
-        <input type="checkbox" {...register(name)} />
+        <input id={inputId} type="checkbox" {...register(name)} />
       ) : (
         <input
+          id={inputId}
           dir={ltr ? "ltr" : "rtl"}
           type={
             field.type === "date"
@@ -40,6 +63,6 @@ export function DynamicField<TFormValues extends FieldValues>({
         />
       )}{" "}
       {error && <small>{error}</small>}
-    </label>
+    </div>
   );
 }
