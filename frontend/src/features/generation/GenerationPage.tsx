@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import {
   useFieldArray,
   useForm,
+  useWatch,
+  type Control,
   type FieldArrayWithId,
   type FieldErrors,
   type FieldPath,
@@ -83,7 +85,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     register,
     control,
     handleSubmit,
-    formState: { errors, isDirty },
+    formState: { dirtyFields, errors, isDirty },
     getValues,
     reset,
     setValue,
@@ -92,6 +94,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
   });
   const buyers = useFieldArray({ control, name: "buyers" });
   const sellers = useFieldArray({ control, name: "sellers" });
+  const currentValues = useWatch({ control });
   const hasDraftChanges = selected.length > 0 && (!isCurrentDraftGenerated || isDirty);
 
   useEffect(() => {
@@ -195,6 +198,45 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     }
     return fields.map((field) => createClearTarget(`transactionValues.${field.key}`, field));
   };
+  const sectionCanClear = (
+    section: "buyers" | "sellers" | "property" | "transaction",
+    fields: FieldRequirement[],
+  ): boolean => {
+    if (section === "buyers") {
+      return (
+        currentValues.buyers?.some((party, index) =>
+          fields.some(
+            (field) =>
+              Boolean(dirtyFields.buyers?.[index]?.values?.[field.key]) &&
+              hasEnteredValue(party?.values?.[field.key]),
+          ),
+        ) ?? false
+      );
+    }
+    if (section === "sellers") {
+      return (
+        currentValues.sellers?.some((party, index) =>
+          fields.some(
+            (field) =>
+              Boolean(dirtyFields.sellers?.[index]?.values?.[field.key]) &&
+              hasEnteredValue(party?.values?.[field.key]),
+          ),
+        ) ?? false
+      );
+    }
+    if (section === "property") {
+      return fields.some(
+        (field) =>
+          Boolean(dirtyFields.property?.values?.[field.key]) &&
+          hasEnteredValue(currentValues.property?.values?.[field.key]),
+      );
+    }
+    return fields.some(
+      (field) =>
+        Boolean(dirtyFields.transactionValues?.[field.key]) &&
+        hasEnteredValue(currentValues.transactionValues?.[field.key]),
+    );
+  };
   const requestClearFields = (targets: ClearTarget[], copy: ConfirmationCopy): void => {
     const populatedTargets = targets.filter(({ path }) => {
       const value = getValues(path);
@@ -243,6 +285,12 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
       confirmLabel: activeTemplate ? "ניקוי שדות המסמך" : "ניקוי כל השדות",
     });
   };
+  const documentCanClear = req
+    ? sectionCanClear("buyers", visibleFields(req.buyerFields)) ||
+      sectionCanClear("sellers", visibleFields(req.sellerFields)) ||
+      sectionCanClear("property", visibleFields(req.propertyFields)) ||
+      sectionCanClear("transaction", visibleFields(req.transactionFields))
+    : false;
   const confirmPendingAction = (): void => {
     if (!pendingAction) return;
     if (pendingAction.type === "reset") applyReset();
@@ -290,9 +338,8 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
     <section className="generationPage">
       <div className="pageTitle">
         <div>
-          <p className="eyebrow">מסמך חדש</p>
           <h1>הפקת מסמכים</h1>
-          <p>בחרו מסמכים, מלאו את פרטי הצדדים והעסקה, והפיקו קובץ להורדה.</p>
+          <p>בחרו מסמכים והשלימו את הפרטים הנדרשים.</p>
         </div>
         <div className="pageTitleActions">
           {hasDraftChanges && <span className="draftIndicator">קיימת טיוטה שטרם הופקה</span>}
@@ -315,7 +362,6 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
       <div className="card">
         <div className="sectionHeading">
           <div>
-            <span className="step">1</span>
             <h2>בחירת מסמכים</h2>
           </div>
           <button
@@ -385,21 +431,8 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             () => setActiveTemplateId(null),
           )}
         >
-          <div className="card documentWorkspace">
-            <div className="documentWorkspaceHeader">
-              <div>
-                <p className="eyebrow">חלוקה לפי מסמך</p>
-                <h2>{activeTemplate?.displayName ?? "כל המסמכים שנבחרו"}</h2>
-                <p>
-                  {activeTemplate
-                    ? "מוצגים רק השדות הדרושים למסמך זה. שדות משותפים נשמרים גם במעבר בין מסמכים."
-                    : "מוצגים כל השדות הנדרשים, ללא כפילויות בין המסמכים."}
-                </p>
-              </div>
-              <button type="button" className="secondary" onClick={requestDocumentReset}>
-                {activeTemplate ? "ניקוי שדות המסמך" : "ניקוי כל השדות"}
-              </button>
-            </div>
+          <div className="documentFilterBar">
+            <span className="filterLabel">שדות להצגה</span>
             <div className="documentTabs" aria-label="הצגת שדות לפי מסמך">
               <button
                 type="button"
@@ -421,10 +454,17 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className="sectionReset"
+              disabled={!documentCanClear}
+              onClick={requestDocumentReset}
+            >
+              {activeTemplate ? "ניקוי שדות המסמך" : "ניקוי השדות"}
+            </button>
           </div>
           <PartySection
             title="קונים"
-            step="2"
             singular="קונה"
             items={buyers.fields}
             append={() => buyers.append({ values: {} })}
@@ -432,7 +472,10 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             fields={visibleFields(req.buyerFields)}
             prefix="buyers"
             register={register}
+            control={control}
             errors={errors}
+            canReset={sectionCanClear("buyers", visibleFields(req.buyerFields))}
+            isFieldDirty={(index, key) => Boolean(dirtyFields.buyers?.[index]?.values?.[key])}
             onReset={(fields) => requestSectionReset("buyers", "קונים", fields)}
             onClearField={(path, field) =>
               requestFieldReset(createClearTarget(path, field), field.label)
@@ -440,7 +483,6 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
           />
           <PartySection
             title="מוכרים"
-            step="3"
             singular="מוכר"
             items={sellers.fields}
             append={() => sellers.append({ values: {} })}
@@ -448,7 +490,10 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             fields={visibleFields(req.sellerFields)}
             prefix="sellers"
             register={register}
+            control={control}
             errors={errors}
+            canReset={sectionCanClear("sellers", visibleFields(req.sellerFields))}
+            isFieldDirty={(index, key) => Boolean(dirtyFields.sellers?.[index]?.values?.[key])}
             onReset={(fields) => requestSectionReset("sellers", "מוכרים", fields)}
             onClearField={(path, field) =>
               requestFieldReset(createClearTarget(path, field), field.label)
@@ -458,12 +503,12 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             <div className="card">
               <div className="sectionHeading">
                 <div>
-                  <span className="step">4</span>
                   <h2>נכס</h2>
                 </div>
                 <button
                   type="button"
                   className="sectionReset"
+                  disabled={!sectionCanClear("property", visibleFields(req.propertyFields))}
                   onClick={() =>
                     requestSectionReset("property", "נכס", visibleFields(req.propertyFields))
                   }
@@ -478,6 +523,8 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
                     field={f}
                     name={`property.values.${f.key}`}
                     register={register}
+                    control={control}
+                    dirty={Boolean(dirtyFields.property?.values?.[f.key])}
                     error={errors.property?.values?.[f.key]?.message}
                     onClear={() =>
                       requestFieldReset(createClearTarget(`property.values.${f.key}`, f), f.label)
@@ -491,12 +538,12 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             <div className="card">
               <div className="sectionHeading">
                 <div>
-                  <span className="step">5</span>
                   <h2>פרטי העסקה</h2>
                 </div>
                 <button
                   type="button"
                   className="sectionReset"
+                  disabled={!sectionCanClear("transaction", visibleFields(req.transactionFields))}
                   onClick={() =>
                     requestSectionReset(
                       "transaction",
@@ -515,6 +562,8 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
                     field={f}
                     name={`transactionValues.${f.key}`}
                     register={register}
+                    control={control}
+                    dirty={Boolean(dirtyFields.transactionValues?.[f.key])}
                     error={errors.transactionValues?.[f.key]?.message}
                     onClear={() =>
                       requestFieldReset(createClearTarget(`transactionValues.${f.key}`, f), f.label)
@@ -526,7 +575,6 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
           )}
           <div className="generationActions">
             <div>
-              <strong>הפקה והורדה</strong>
               <span>הקבצים יורדו למחשב ואינם נשמרים במערכת.</span>
             </div>
             <div>
@@ -555,7 +603,6 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
 
 interface PartySectionProps {
   title: string;
-  step: string;
   singular: string;
   items: PartyItem[];
   append: () => void;
@@ -563,14 +610,16 @@ interface PartySectionProps {
   fields: FieldRequirement[];
   prefix: PartyPrefix;
   register: UseFormRegister<FormData>;
+  control: Control<FormData>;
   errors: FieldErrors<FormData>;
+  canReset: boolean;
+  isFieldDirty: (index: number, key: string) => boolean;
   onReset: (fields: FieldRequirement[]) => void;
   onClearField: (path: FormValuePath, field: FieldRequirement) => void;
 }
 
 function PartySection({
   title,
-  step,
   singular,
   items,
   append,
@@ -578,7 +627,10 @@ function PartySection({
   fields,
   prefix,
   register,
+  control,
   errors,
+  canReset,
+  isFieldDirty,
   onReset,
   onClearField,
 }: PartySectionProps) {
@@ -588,11 +640,15 @@ function PartySection({
     <div className="card">
       <div className="sectionHeading">
         <div>
-          <span className="step">{step}</span>
           <h2>{title}</h2>
         </div>
         <div className="sectionActions">
-          <button type="button" className="sectionReset" onClick={() => onReset(fields)}>
+          <button
+            type="button"
+            className="sectionReset"
+            disabled={!canReset}
+            onClick={() => onReset(fields)}
+          >
             ניקוי אזור
           </button>
           <button type="button" className="secondary" onClick={append}>
@@ -622,6 +678,8 @@ function PartySection({
                   field={field}
                   name={name}
                   register={register}
+                  control={control}
+                  dirty={isFieldDirty(index, field.key)}
                   error={error}
                   onClear={() => onClearField(name as FormValuePath, field)}
                 />

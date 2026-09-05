@@ -158,9 +158,8 @@ export function TemplatesPage() {
     <section>
       <div className="pageTitle">
         <div>
-          <p className="eyebrow">ניהול</p>
           <h1>תבניות המסמכים</h1>
-          <p>התבניות נקראות מתיקיית Git ואינן ניתנות לעריכה באתר.</p>
+          <p>צפייה בתבניות ובסיווג השדות שלהן.</p>
         </div>
         <button className="primary" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
           רענון תבניות
@@ -190,7 +189,7 @@ export function TemplatesPage() {
             ))}
             <details className="templateFieldDetails">
               <summary>
-                <span>הצגת השדות בתבנית</span>
+                <span>שדות בתבנית</span>
                 <span className="fieldCount">{template.fields.length}</span>
               </summary>
               {template.fields.length === 0 ? (
@@ -228,42 +227,23 @@ export function TemplatesPage() {
       </div>
 
       <div className="classificationHeader">
-        <div>
-          <h2 className="subTitle">סיווג שדות</h2>
-          <p className="muted">אפשר לנהל לפי מסמך, אך האישור כולל את כל השדות הממתינים.</p>
-        </div>
+        <h2 className="subTitle">סיווג שדות</h2>
         <button
           type="button"
           className="dangerSecondary"
-          disabled={resetClassifications.isPending || allFields.length === 0}
+          disabled={
+            resetClassifications.isPending ||
+            allFields.length === 0 ||
+            pendingFields.length === allFields.length
+          }
           onClick={requestFullReset}
         >
           איפוס כל הסיווגים
         </button>
       </div>
 
-      <div className="card documentWorkspace classificationWorkspace">
-        <div className="documentWorkspaceHeader">
-          <div>
-            <p className="eyebrow">חלוקה לפי מסמך</p>
-            <h2>{activeTemplate?.displayName ?? "כל השדות"}</h2>
-            <p>
-              {activeTemplate
-                ? "מוצגים השדות המשמשים בתבנית זו. סיווג של שדה משותף חל בכל המסמכים."
-                : "מוצגים כל השדות שהתגלו בכל התבניות."}
-            </p>
-          </div>
-          {activeTemplate && pendingFields.length === 0 && (
-            <button
-              type="button"
-              className="dangerSecondary"
-              disabled={resetClassifications.isPending || visibleFieldIds.size === 0}
-              onClick={requestTemplateReset}
-            >
-              איפוס סיווגי המסמך
-            </button>
-          )}
-        </div>
+      <div className="documentFilterBar classificationFilterBar">
+        <span className="filterLabel">שדות להצגה</span>
         <div className="documentTabs" aria-label="הצגת סיווגים לפי מסמך">
           <button
             type="button"
@@ -285,6 +265,16 @@ export function TemplatesPage() {
             </button>
           ))}
         </div>
+        {activeTemplate && pendingFields.length === 0 && (
+          <button
+            type="button"
+            className="sectionReset"
+            disabled={resetClassifications.isPending || visibleFieldIds.size === 0}
+            onClick={requestTemplateReset}
+          >
+            איפוס סיווגי המסמך
+          </button>
+        )}
       </div>
 
       {classificationError && (
@@ -329,6 +319,15 @@ function createDraft(field: FieldDefinition): ClassificationDraft {
   };
 }
 
+function draftsEqual(left: ClassificationDraft, right: ClassificationDraft): boolean {
+  return (
+    left.scope === right.scope &&
+    left.type === right.type &&
+    left.searchable === right.searchable &&
+    left.filterable === right.filterable
+  );
+}
+
 function ClassificationEditor({
   fields,
   visibleFieldIds,
@@ -352,6 +351,11 @@ function ClassificationEditor({
   const displayedFields = fields.filter((field) => visibleFieldIds.has(field._id));
   const classifiedCount = fields.filter((field) => drafts[field._id]?.scope).length;
   const allClassified = classifiedCount === fields.length;
+  const draftChanged = (field: FieldDefinition): boolean => {
+    const draft = drafts[field._id];
+    return draft ? !draftsEqual(draft, createDraft(field)) : false;
+  };
+  const displayedDraftsDirty = displayedFields.some(draftChanged);
 
   const updateDraft = (fieldId: string, update: Partial<ClassificationDraft>): void => {
     setDrafts((current) => ({
@@ -390,6 +394,7 @@ function ClassificationEditor({
           <button
             type="button"
             className="sectionReset"
+            disabled={!displayedDraftsDirty}
             onClick={() => setShowDraftResetConfirmation(true)}
           >
             שחזור השדות המוצגים
@@ -409,9 +414,10 @@ function ClassificationEditor({
                 <button
                   type="button"
                   className="fieldResetButton"
+                  disabled={!draftChanged(field)}
                   onClick={() => resetDraft(field)}
                 >
-                  שחזור ערכי השדה
+                  שחזור
                 </button>
               </div>
               <label>

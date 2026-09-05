@@ -15,7 +15,6 @@ export function EntitiesPage({ kind }: { kind: "customers" | "properties" }) {
     <section>
       <div className="pageTitle">
         <div>
-          <p className="eyebrow">מאגר מידע</p>
           <h1>{isCustomers ? "לקוחות" : "נכסים"}</h1>
           <p>
             {isCustomers

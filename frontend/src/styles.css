@@ -189,12 +189,6 @@ nav button:hover .navIcon {
   margin: 0;
   color: var(--text-secondary);
 }
-.eyebrow {
-  font-size: 12px !important;
-  color: var(--text-secondary) !important;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
 .pageTitleActions {
   display: flex;
   align-items: center;
@@ -288,17 +282,6 @@ nav button:hover .navIcon {
   margin: 0;
   color: var(--text-primary);
 }
-.step {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid #c8d0db;
-  background: #eef1f5;
-  color: var(--primary);
-  font-weight: 800;
-}
 .templateGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -339,22 +322,21 @@ nav button:hover .navIcon {
   opacity: 0.65;
   background: var(--surface-secondary);
 }
-.documentWorkspace {
-  border-top: 3px solid var(--primary);
-}
-.documentWorkspaceHeader {
+.documentFilterBar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: var(--surface);
 }
-.documentWorkspaceHeader h2 {
-  margin: 3px 0 6px;
-  color: var(--text-primary);
-}
-.documentWorkspaceHeader p:not(.eyebrow) {
-  margin: 0;
+.filterLabel {
+  flex: 0 0 auto;
   color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
 }
 .documentTabs {
   display: flex;
@@ -364,6 +346,10 @@ nav button:hover .navIcon {
   padding: 5px;
   border-radius: 9px;
   background: var(--surface-secondary);
+}
+.documentFilterBar .documentTabs {
+  flex: 1;
+  margin-top: 0;
 }
 .documentTabs button {
   flex: 0 0 auto;
@@ -417,9 +403,15 @@ nav button:hover .navIcon {
   font-size: 12px;
   font-weight: 650;
 }
-.fieldClear:hover,
-.sectionReset:hover {
+.fieldClear:hover:not(:disabled),
+.sectionReset:hover:not(:disabled) {
   color: var(--error);
+}
+.fieldClear:disabled,
+.sectionReset:disabled,
+.fieldResetButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 .fieldClear svg {
   width: 14px;
@@ -740,11 +732,8 @@ dd {
   font-size: 12px;
   font-weight: 650;
 }
-.fieldResetButton:hover {
+.fieldResetButton:hover:not(:disabled) {
   color: var(--primary);
-}
-.classificationWorkspace {
-  margin-top: 18px;
 }
 .approvedClassifications {
   margin-top: 30px;
@@ -874,11 +863,7 @@ dd {
   gap: 10px;
 }
 .generationActions > div:first-child {
-  flex-direction: column;
-  gap: 2px;
-}
-.generationActions strong {
-  color: var(--primary);
+  align-items: center;
 }
 .generationActions span {
   color: var(--text-secondary);
@@ -994,9 +979,14 @@ dd {
   .pageTitle h1 {
     font-size: 30px;
   }
-  .documentWorkspaceHeader {
+  .documentFilterBar {
     align-items: stretch;
-    flex-direction: column;
+    flex-wrap: wrap;
+  }
+  .documentFilterBar .documentTabs {
+    order: 3;
+    width: 100%;
+    flex-basis: 100%;
   }
   .classification {
     align-items: flex-start;

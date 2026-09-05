@@ -3,7 +3,6 @@ export function TutorialPage() {
     <section className="tutorial">
       <div className="pageTitle">
         <div>
-          <p className="eyebrow">מרכז ידע</p>
           <h1>מדריך</h1>
           <p>כך מוסיפים תבניות ושדות ומפיקים מסמכים.</p>
         </div>

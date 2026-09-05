@@ -1,11 +1,19 @@
 import type { FieldRequirement } from "../../types";
 import { useId } from "react";
-import type { FieldPath, FieldValues, UseFormRegister } from "react-hook-form";
+import {
+  useWatch,
+  type Control,
+  type FieldPath,
+  type FieldValues,
+  type UseFormRegister,
+} from "react-hook-form";
 
 interface DynamicFieldProps<TFormValues extends FieldValues> {
   field: FieldRequirement;
   name: FieldPath<TFormValues>;
   register: UseFormRegister<TFormValues>;
+  control: Control<TFormValues>;
+  dirty: boolean;
   error?: string | undefined;
   onClear?: (() => void) | undefined;
 }
@@ -14,10 +22,14 @@ export function DynamicField<TFormValues extends FieldValues>({
   field,
   name,
   register,
+  control,
+  dirty,
   error,
   onClear,
 }: DynamicFieldProps<TFormValues>) {
   const inputId = useId();
+  const value = useWatch({ control, name });
+  const canClear = dirty && value !== undefined && value !== "" && value !== false;
   const rules = field.required ? { required: "שדה חובה" } : undefined;
   const ltr = ["idNumber", "number", "money", "percentage", "date"].includes(field.type);
   return (
@@ -28,7 +40,7 @@ export function DynamicField<TFormValues extends FieldValues>({
           {field.required && <em> *</em>}
         </label>
         {onClear && (
-          <button type="button" className="fieldClear" onClick={onClear}>
+          <button type="button" className="fieldClear" disabled={!canClear} onClick={onClear}>
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
