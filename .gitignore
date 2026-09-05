@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+node_modules
+dist
+build
+temp
+tmp
+.idea
+.vscode
+.DS_Store
+.inspection
