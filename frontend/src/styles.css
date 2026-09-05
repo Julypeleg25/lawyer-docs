@@ -554,6 +554,9 @@ dd {
   flex-direction: column;
   gap: 4px;
 }
+.classificationIdentity {
+  align-items: flex-start;
+}
 .classification small {
   color: var(--text-secondary);
   overflow-wrap: anywhere;
@@ -586,6 +589,16 @@ dd {
   color: var(--text-secondary);
   font-weight: 700;
 }
+.classificationProgressRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.classificationProgressRow .classificationProgress {
+  margin-bottom: 0;
+}
 .classificationActions {
   position: sticky;
   bottom: 18px;
@@ -598,6 +611,62 @@ dd {
 }
 .classificationActions span {
   color: var(--warning);
+}
+.classificationActions > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.classificationActions small {
+  color: var(--text-secondary);
+}
+.fieldResetButton {
+  align-self: flex-start;
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.fieldResetButton:hover {
+  color: var(--primary);
+}
+.classificationWorkspace {
+  margin-top: 18px;
+}
+.approvedClassifications {
+  margin-top: 30px;
+}
+.approvedClassifications h3 {
+  margin: 0 0 12px;
+}
+.approvedClassificationList {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.approvedClassificationRow {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 120px 140px auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--surface-secondary);
+}
+.approvedClassificationRow:last-child {
+  border-bottom: 0;
+}
+.approvedClassificationRow > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.approvedClassificationRow small,
+.approvedClassificationRow > span {
+  color: var(--text-secondary);
 }
 .dangerSecondary {
   min-height: 42px;
@@ -828,6 +897,13 @@ dd {
     align-items: stretch;
     flex-direction: column;
   }
+  .classificationProgressRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .approvedClassificationRow {
+    grid-template-columns: 1fr 1fr;
+  }
   .generationActions {
     align-items: stretch;
     flex-direction: column;
@@ -867,6 +943,10 @@ dd {
   .sectionActions {
     width: 100%;
     justify-content: space-between;
+  }
+  .approvedClassificationRow {
+    grid-template-columns: 1fr;
+    gap: 7px;
   }
   .fields,
   .templateGrid,

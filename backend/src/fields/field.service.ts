@@ -92,15 +92,16 @@ export async function ensureKnownFields(): Promise<void> {
   }
 }
 
-export async function resetFieldClassifications(): Promise<void> {
+export async function resetFieldClassifications(fieldIds?: string[]): Promise<void> {
   const knownKeys = known.map((field) => field.key);
+  const targetFilter = fieldIds ? { _id: { $in: fieldIds } } : {};
   await FieldDefinitionModel.updateMany(
-    { key: { $nin: knownKeys } },
+    { ...targetFilter, key: { $nin: knownKeys } },
     { $set: { classified: false }, $unset: { scope: 1 } },
   );
   for (const field of known) {
     await FieldDefinitionModel.updateOne(
-      { key: field.key },
+      { ...targetFilter, key: field.key },
       {
         $set: {
           scope: field.scope,

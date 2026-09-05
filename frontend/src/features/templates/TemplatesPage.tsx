@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { z } from "zod";
 import { api, ApiError } from "../../shared/api";
+import { ConfirmDialog } from "../../shared/ConfirmDialog";
 import {
   fieldDefinitionSchema,
   fieldTypeSchema,
   templateSchema,
   type FieldDefinition,
   type FieldType,
+  type Template,
 } from "../../types";
 
 const templateListSchema = z.array(templateSchema);
@@ -19,6 +21,12 @@ interface ClassificationDraft {
   type: FieldType;
   searchable: boolean;
   filterable: boolean;
+}
+interface ResetRequest {
+  fieldIds?: string[];
+  title: string;
+  description: string;
+  confirmLabel: string;
 }
 
 const scopeLabels: Record<FieldScope, string> = {
@@ -47,8 +55,15 @@ function classificationErrorMessage(error: Error | null): string | undefined {
   return "שמירת הסיווגים נכשלה. נסו שוב.";
 }
 
+function getTemplateFieldIds(template: Template, fields: FieldDefinition[]): string[] {
+  const templateKeys = new Set(template.fields.flatMap((field) => (field.key ? [field.key] : [])));
+  return fields.filter((field) => templateKeys.has(field.key)).map((field) => field._id);
+}
+
 export function TemplatesPage() {
   const client = useQueryClient();
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [resetRequest, setResetRequest] = useState<ResetRequest | null>(null);
   const templates = useQuery({
     queryKey: ["templates"],
     queryFn: () => api("/templates", templateListSchema),
@@ -74,14 +89,67 @@ export function TemplatesPage() {
     onSuccess: () => client.invalidateQueries(),
   });
   const resetClassifications = useMutation({
-    mutationFn: () =>
-      api("/fields/classifications/reset", fieldDefinitionListSchema, { method: "POST" }),
-    onSuccess: () => client.invalidateQueries(),
+    mutationFn: (fieldIds?: string[]) =>
+      api("/fields/classifications/reset", fieldDefinitionListSchema, {
+        method: "POST",
+        body: JSON.stringify(fieldIds ? { fieldIds } : {}),
+      }),
+    onSuccess: () => {
+      setResetRequest(null);
+      return client.invalidateQueries();
+    },
   });
-  const pendingFields = fields.data?.filter((field) => !field.classified) ?? [];
+
+  const allTemplates = templates.data ?? [];
+  const allFields = fields.data ?? [];
+  const activeTemplate = activeTemplateId
+    ? allTemplates.find((template) => template.id === activeTemplateId)
+    : undefined;
+  const visibleFieldIds = new Set(
+    activeTemplate
+      ? getTemplateFieldIds(activeTemplate, allFields)
+      : allFields.map((field) => field._id),
+  );
+  const pendingFields = allFields.filter((field) => !field.classified);
+  const approvedVisibleFields = allFields.filter(
+    (field) => field.classified && visibleFieldIds.has(field._id),
+  );
   const classificationError = classificationErrorMessage(
     approveClassifications.error ?? resetClassifications.error,
   );
+
+  const requestFullReset = (): void => {
+    if (allFields.length === 0) return;
+    setResetRequest({
+      title: "לאפס את כל הסיווגים?",
+      description:
+        pendingFields.length > 0
+          ? "הבחירות שטרם אושרו יימחקו וכל השדות ייפתחו מחדש לסיווג. לא ניתן לבטל פעולה זו."
+          : "כל השדות ייפתחו מחדש לסיווג ולאישור. לא ניתן לבטל פעולה זו.",
+      confirmLabel: "איפוס כל הסיווגים",
+    });
+  };
+  const requestTemplateReset = (): void => {
+    if (!activeTemplate) return;
+    const fieldIds = getTemplateFieldIds(activeTemplate, allFields);
+    if (fieldIds.length === 0) return;
+    setResetRequest({
+      fieldIds,
+      title: `לאפס את סיווגי „${activeTemplate.displayName}”?`,
+      description:
+        "השדות המשמשים מסמך זה ייפתחו מחדש לאישור. שדה משותף עשוי להופיע גם במסמכים אחרים.",
+      confirmLabel: "איפוס סיווגי המסמך",
+    });
+  };
+  const requestFieldReset = (field: FieldDefinition): void => {
+    setResetRequest({
+      fieldIds: [field._id],
+      title: `לאפס את הסיווג של „${field.label}”?`,
+      description: "רק שדה זה ייפתח מחדש לסיווג ולאישור.",
+      confirmLabel: "איפוס הסיווג",
+    });
+  };
+
   return (
     <section>
       <div className="pageTitle">
@@ -95,47 +163,91 @@ export function TemplatesPage() {
         </button>
       </div>
       <div className="cards">
-        {templates.data?.map((t) => (
-          <article className="card templateCard" key={t.id}>
+        {allTemplates.map((template) => (
+          <article className="card templateCard" key={template.id}>
             <div className="statusRow">
-              <h2>{t.displayName}</h2>
-              <span className={t.valid ? "badge good" : "badge bad"}>
-                {t.valid ? "תקין" : "דורש תיקון"}
+              <h2>{template.displayName}</h2>
+              <span className={template.valid ? "badge good" : "badge bad"}>
+                {template.valid ? "תקין" : "דורש תיקון"}
               </span>
             </div>
             <dl>
               <dt>קובץ</dt>
-              <dd dir="ltr">{t.filename}</dd>
+              <dd dir="ltr">{template.filename}</dd>
               <dt>מספר שדות</dt>
-              <dd>{t.fields.length}</dd>
+              <dd>{template.fields.length}</dd>
               <dt>מזהה שינוי</dt>
-              <dd dir="ltr">{t.hash.slice(0, 12)}</dd>
+              <dd dir="ltr">{template.hash.slice(0, 12)}</dd>
             </dl>
-            {t.errors.map((e) => (
-              <p className="inlineError" key={e}>
-                {e}
+            {template.errors.map((error) => (
+              <p className="inlineError" key={error}>
+                {error}
               </p>
             ))}
           </article>
         ))}
       </div>
+
       <div className="classificationHeader">
         <div>
           <h2 className="subTitle">סיווג שדות</h2>
-          <p className="muted">יש לסווג את כל השדות ולאשר את הרשימה כיחידה אחת.</p>
+          <p className="muted">אפשר לנהל לפי מסמך, אך האישור כולל את כל השדות הממתינים.</p>
         </div>
         <button
+          type="button"
           className="dangerSecondary"
-          disabled={resetClassifications.isPending || !fields.data?.length}
-          onClick={() => {
-            if (window.confirm("לאפס את אישור הסיווג של כל השדות ולהתחיל מחדש?")) {
-              resetClassifications.mutate();
-            }
-          }}
+          disabled={resetClassifications.isPending || allFields.length === 0}
+          onClick={requestFullReset}
         >
-          איפוס סיווגים
+          איפוס כל הסיווגים
         </button>
       </div>
+
+      <div className="card documentWorkspace classificationWorkspace">
+        <div className="documentWorkspaceHeader">
+          <div>
+            <p className="eyebrow">חלוקה לפי מסמך</p>
+            <h2>{activeTemplate?.displayName ?? "כל השדות"}</h2>
+            <p>
+              {activeTemplate
+                ? "מוצגים השדות המשמשים בתבנית זו. סיווג של שדה משותף חל בכל המסמכים."
+                : "מוצגים כל השדות שהתגלו בכל התבניות."}
+            </p>
+          </div>
+          {activeTemplate && pendingFields.length === 0 && (
+            <button
+              type="button"
+              className="dangerSecondary"
+              disabled={resetClassifications.isPending || visibleFieldIds.size === 0}
+              onClick={requestTemplateReset}
+            >
+              איפוס סיווגי המסמך
+            </button>
+          )}
+        </div>
+        <div className="documentTabs" aria-label="הצגת סיווגים לפי מסמך">
+          <button
+            type="button"
+            aria-pressed={activeTemplateId === null}
+            className={activeTemplateId === null ? "active" : ""}
+            onClick={() => setActiveTemplateId(null)}
+          >
+            כל השדות
+          </button>
+          {allTemplates.map((template) => (
+            <button
+              type="button"
+              aria-pressed={activeTemplateId === template.id}
+              className={activeTemplateId === template.id ? "active" : ""}
+              key={template.id}
+              onClick={() => setActiveTemplateId(template.id)}
+            >
+              {template.displayName}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {classificationError && (
         <div className="errorPanel" role="alert">
           {classificationError}
@@ -147,20 +259,45 @@ export function TemplatesPage() {
         <ClassificationEditor
           key={pendingFields.map((field) => field._id).join("|")}
           fields={pendingFields}
+          visibleFieldIds={visibleFieldIds}
           isSaving={approveClassifications.isPending}
           onApprove={(classifications) => approveClassifications.mutate(classifications)}
         />
       )}
+      {pendingFields.length === 0 && approvedVisibleFields.length > 0 && (
+        <ApprovedClassifications fields={approvedVisibleFields} onReset={requestFieldReset} />
+      )}
+
+      <ConfirmDialog
+        open={resetRequest !== null}
+        title={resetRequest?.title ?? "איפוס סיווגים"}
+        description={resetRequest?.description ?? ""}
+        confirmLabel={resetRequest?.confirmLabel ?? "איפוס"}
+        tone="danger"
+        onCancel={() => setResetRequest(null)}
+        onConfirm={() => resetClassifications.mutate(resetRequest?.fieldIds)}
+      />
     </section>
   );
 }
 
+function createDraft(field: FieldDefinition): ClassificationDraft {
+  return {
+    scope: field.scope ?? "",
+    type: field.type,
+    searchable: field.searchable,
+    filterable: field.filterable,
+  };
+}
+
 function ClassificationEditor({
   fields,
+  visibleFieldIds,
   isSaving,
   onApprove,
 }: {
   fields: FieldDefinition[];
+  visibleFieldIds: Set<string>;
   isSaving: boolean;
   onApprove: (
     classifications: ({ id: string } & Omit<ClassificationDraft, "scope"> & {
@@ -169,18 +306,11 @@ function ClassificationEditor({
   ) => void;
 }) {
   const [drafts, setDrafts] = useState<Record<string, ClassificationDraft>>(() =>
-    Object.fromEntries(
-      fields.map((field) => [
-        field._id,
-        {
-          scope: field.scope ?? "",
-          type: field.type,
-          searchable: field.searchable,
-          filterable: field.filterable,
-        },
-      ]),
-    ),
+    Object.fromEntries(fields.map((field) => [field._id, createDraft(field)])),
   );
+  const [showApprovalConfirmation, setShowApprovalConfirmation] = useState(false);
+  const [showDraftResetConfirmation, setShowDraftResetConfirmation] = useState(false);
+  const displayedFields = fields.filter((field) => visibleFieldIds.has(field._id));
   const classifiedCount = fields.filter((field) => drafts[field._id]?.scope).length;
   const allClassified = classifiedCount === fields.length;
 
@@ -190,90 +320,177 @@ function ClassificationEditor({
       [fieldId]: { ...current[fieldId]!, ...update },
     }));
   };
-
+  const resetDraft = (field: FieldDefinition): void => {
+    setDrafts((current) => ({ ...current, [field._id]: createDraft(field) }));
+  };
+  const resetDisplayedDrafts = (): void => {
+    setDrafts((current) => ({
+      ...current,
+      ...Object.fromEntries(displayedFields.map((field) => [field._id, createDraft(field)])),
+    }));
+    setShowDraftResetConfirmation(false);
+  };
   const approve = (): void => {
     const classifications = fields.flatMap((field) => {
       const draft = drafts[field._id];
       return draft?.scope ? [{ id: field._id, ...draft, scope: draft.scope }] : [];
     });
     if (classifications.length !== fields.length) return;
-    if (window.confirm(`לאשר ולשמור את הסיווג של כל ${fields.length} השדות?`)) {
-      onApprove(classifications);
-    }
+    onApprove(classifications);
+    setShowApprovalConfirmation(false);
   };
 
   return (
     <div className="classificationEditor">
-      <div className="classificationProgress" aria-live="polite">
-        סווגו {classifiedCount} מתוך {fields.length} שדות
+      <div className="classificationProgressRow">
+        <div className="classificationProgress" aria-live="polite">
+          סווגו {classifiedCount} מתוך {fields.length} שדות
+          {displayedFields.length !== fields.length && ` · מוצגים כעת ${displayedFields.length}`}
+        </div>
+        {displayedFields.length > 0 && (
+          <button
+            type="button"
+            className="sectionReset"
+            onClick={() => setShowDraftResetConfirmation(true)}
+          >
+            שחזור השדות המוצגים
+          </button>
+        )}
       </div>
-      {fields.map((field) => {
-        const draft = drafts[field._id]!;
-        return (
-          <div className="card classification" key={field._id}>
+      {displayedFields.length === 0 ? (
+        <div className="card empty">אין שדות הממתינים לסיווג במסמך זה.</div>
+      ) : (
+        displayedFields.map((field) => {
+          const draft = drafts[field._id]!;
+          return (
+            <div className="card classification" key={field._id}>
+              <div className="classificationIdentity">
+                <strong>{field.label}</strong>
+                <small dir="ltr">{field.key}</small>
+                <button
+                  type="button"
+                  className="fieldResetButton"
+                  onClick={() => resetDraft(field)}
+                >
+                  שחזור ערכי השדה
+                </button>
+              </div>
+              <label>
+                <span>שיוך</span>
+                <select
+                  value={draft.scope}
+                  onChange={(event) => {
+                    const scope = event.target.value
+                      ? fieldScopeSchema.parse(event.target.value)
+                      : "";
+                    updateDraft(field._id, { scope });
+                  }}
+                >
+                  <option value="">יש לבחור</option>
+                  {Object.entries(scopeLabels).map(([scope, label]) => (
+                    <option key={scope} value={scope}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>סוג שדה</span>
+                <select
+                  value={draft.type}
+                  onChange={(event) => {
+                    const type = fieldTypeSchema.parse(event.target.value);
+                    updateDraft(field._id, { type });
+                  }}
+                >
+                  {Object.entries(typeLabels).map(([type, label]) => (
+                    <option key={type} value={type}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="checkField">
+                <input
+                  type="checkbox"
+                  checked={draft.searchable}
+                  onChange={(event) => updateDraft(field._id, { searchable: event.target.checked })}
+                />
+                ניתן לחיפוש
+              </label>
+              <label className="checkField">
+                <input
+                  type="checkbox"
+                  checked={draft.filterable}
+                  onChange={(event) => updateDraft(field._id, { filterable: event.target.checked })}
+                />
+                ניתן לסינון
+              </label>
+            </div>
+          );
+        })
+      )}
+      <div className="classificationActions">
+        <div>
+          {!allClassified && <span>יש לבחור שיוך לכל השדות לפני האישור.</span>}
+          {displayedFields.length !== fields.length && (
+            <small>האישור כולל גם שדות ממתינים ממסמכים אחרים.</small>
+          )}
+        </div>
+        <button
+          type="button"
+          className="primary"
+          disabled={!allClassified || isSaving}
+          onClick={() => setShowApprovalConfirmation(true)}
+        >
+          {isSaving ? "שומר סיווגים…" : "אישור ושמירת כל הסיווגים"}
+        </button>
+      </div>
+      <ConfirmDialog
+        open={showDraftResetConfirmation}
+        title="לשחזר את השדות המוצגים?"
+        description="בחירות הסיווג שטרם נשמרו בשדות המוצגים יחזרו לערכים המקוריים שלהן."
+        confirmLabel="שחזור השדות"
+        tone="danger"
+        onCancel={() => setShowDraftResetConfirmation(false)}
+        onConfirm={resetDisplayedDrafts}
+      />
+      <ConfirmDialog
+        open={showApprovalConfirmation}
+        title="לאשר את כל הסיווגים?"
+        description={`הסיווג של כל ${fields.length} השדות הממתינים יישמר וישמש בהפקת המסמכים.`}
+        confirmLabel="אישור ושמירה"
+        onCancel={() => setShowApprovalConfirmation(false)}
+        onConfirm={approve}
+      />
+    </div>
+  );
+}
+
+function ApprovedClassifications({
+  fields,
+  onReset,
+}: {
+  fields: FieldDefinition[];
+  onReset: (field: FieldDefinition) => void;
+}) {
+  return (
+    <div className="approvedClassifications">
+      <h3>סיווגים מאושרים</h3>
+      <div className="approvedClassificationList">
+        {fields.map((field) => (
+          <article key={field._id} className="approvedClassificationRow">
             <div>
               <strong>{field.label}</strong>
               <small dir="ltr">{field.key}</small>
             </div>
-            <label>
-              <span>שיוך</span>
-              <select
-                value={draft.scope}
-                onChange={(event) => {
-                  const scope = event.target.value
-                    ? fieldScopeSchema.parse(event.target.value)
-                    : "";
-                  updateDraft(field._id, { scope });
-                }}
-              >
-                <option value="">יש לבחור</option>
-                {Object.entries(scopeLabels).map(([scope, label]) => (
-                  <option key={scope} value={scope}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>סוג שדה</span>
-              <select
-                value={draft.type}
-                onChange={(event) => {
-                  const type = fieldTypeSchema.parse(event.target.value);
-                  updateDraft(field._id, { type });
-                }}
-              >
-                {Object.entries(typeLabels).map(([type, label]) => (
-                  <option key={type} value={type}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="checkField">
-              <input
-                type="checkbox"
-                checked={draft.searchable}
-                onChange={(event) => updateDraft(field._id, { searchable: event.target.checked })}
-              />
-              ניתן לחיפוש
-            </label>
-            <label className="checkField">
-              <input
-                type="checkbox"
-                checked={draft.filterable}
-                onChange={(event) => updateDraft(field._id, { filterable: event.target.checked })}
-              />
-              ניתן לסינון
-            </label>
-          </div>
-        );
-      })}
-      <div className="classificationActions">
-        {!allClassified && <span>יש לבחור שיוך לכל השדות לפני האישור.</span>}
-        <button className="primary" disabled={!allClassified || isSaving} onClick={approve}>
-          {isSaving ? "שומר סיווגים…" : "אישור ושמירת כל הסיווגים"}
-        </button>
+            <span>{field.scope ? scopeLabels[field.scope] : "ללא שיוך"}</span>
+            <span>{typeLabels[field.type]}</span>
+            <button type="button" className="sectionReset" onClick={() => onReset(field)}>
+              איפוס סיווג
+            </button>
+          </article>
+        ))}
       </div>
     </div>
   );

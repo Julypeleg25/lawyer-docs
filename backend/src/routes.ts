@@ -43,6 +43,14 @@ const classificationInput = z.object({
     )
     .min(1),
 });
+const classificationResetInput = z
+  .object({
+    fieldIds: z
+      .array(z.string().regex(/^[a-f\d]{24}$/iu))
+      .min(1)
+      .optional(),
+  })
+  .default({});
 const generationInput = z.object({
   templateIds: z.array(id).min(1),
   buyers: z.array(z.object({ customerId: id.optional(), values })),
@@ -145,8 +153,9 @@ router.put(
 );
 router.post(
   "/fields/classifications/reset",
-  asyncRoute(async (_req, res) => {
-    await resetFieldClassifications();
+  asyncRoute(async (req, res) => {
+    const { fieldIds } = classificationResetInput.parse(req.body);
+    await resetFieldClassifications(fieldIds);
     await scanTemplates();
     res.json(await FieldDefinitionModel.find().sort({ label: 1 }).lean());
   }),

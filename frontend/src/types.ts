@@ -35,7 +35,12 @@ export const templateSchema = z.object({
   filename: z.string(),
   displayName: z.string(),
   hash: z.string(),
-  fields: z.array(z.unknown()),
+  fields: z.array(
+    z.object({
+      key: z.string().optional(),
+      label: z.string(),
+    }),
+  ),
   valid: z.boolean(),
   errors: z.array(z.string()),
 });
