@@ -34,9 +34,19 @@ export async function scanTemplates(): Promise<TemplateDefinition[]> {
       const unclassified = [
         ...new Set(parsed.fields.filter((field) => !field.classified).map((field) => field.label)),
       ];
+      const ambiguousPersonFields = [
+        ...new Set(
+          parsed.fields
+            .filter((field) => field.scope === "person" && !field.partyRole)
+            .map((field) => field.label),
+        ),
+      ];
       const errors = [
         ...parsed.errors,
         ...unclassified.map((label) => `נדרש סיווג לשדה: ${label}`),
+        ...ambiguousPersonFields.map(
+          (label) => `לא ניתן לקבוע אם השדה שייך לקונה או למוכר: ${label}`,
+        ),
       ];
       templates.push({
         id: templateId(filename),

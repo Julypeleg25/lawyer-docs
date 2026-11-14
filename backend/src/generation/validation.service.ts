@@ -1,5 +1,43 @@
 import { AppError } from "../http.js";
 import type { TemplateDefinition } from "../types.js";
+
+export function validatePartyCounts(
+  templates: TemplateDefinition[],
+  buyerCount: number,
+  sellerCount: number,
+): void {
+  for (const template of templates) {
+    const checks = [
+      {
+        count: buyerCount,
+        fieldRole: "buyer",
+        repeatRole: "buyers",
+        label: "קונים",
+      },
+      {
+        count: sellerCount,
+        fieldRole: "seller",
+        repeatRole: "sellers",
+        label: "מוכרים",
+      },
+    ] as const;
+    for (const check of checks) {
+      const usesRole = template.fields.some((field) => field.partyRole === check.fieldRole);
+      const supportsRepeat = template.repeatSections.some(
+        (section) => section.role === check.repeatRole,
+      );
+      if (check.count > 1 && usesRole && !supportsRepeat) {
+        throw new AppError(422, "MULTIPLE_PARTIES_REQUIRE_REPEAT_SECTION", {
+          templateId: template.id,
+          templateName: template.displayName,
+          role: check.repeatRole,
+          roleLabel: check.label,
+        });
+      }
+    }
+  }
+}
+
 export function validateValues(
   templates: TemplateDefinition[],
   values: Record<string, unknown>,

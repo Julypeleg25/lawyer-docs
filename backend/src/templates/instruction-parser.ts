@@ -1,4 +1,5 @@
 import type { ParsedInstruction } from "../types.js";
+import { formatPlaceholder } from "./placeholder-syntax.js";
 
 export interface InstructionResult {
   label: string;
@@ -31,5 +32,5 @@ export function parseInstruction(raw: string): InstructionResult {
     const result = rule(raw);
     if (result) return result;
   }
-  return { label: raw.trim(), error: `הוראה אינה נתמכת: X${raw}X` };
+  return { label: raw.trim(), error: `הוראה אינה נתמכת: ${formatPlaceholder(raw)}` };
 }

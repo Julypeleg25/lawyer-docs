@@ -135,7 +135,10 @@ export async function resolveTemplateFields(fields: TemplateFieldRequirement[]):
     }
     field.key = definition.key;
     field.label = definition.label;
-    if (definition.scope) field.scope = definition.scope;
+    if (definition.scope) {
+      field.scope = definition.scope;
+      if (definition.scope !== "person") delete field.partyRole;
+    }
     field.type = definition.type;
     field.classified = definition.classified;
   }

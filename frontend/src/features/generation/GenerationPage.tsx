@@ -4,7 +4,6 @@ import {
   useFieldArray,
   useForm,
   useWatch,
-  type Control,
   type FieldArrayWithId,
   type FieldErrors,
   type FieldPath,
@@ -51,6 +50,8 @@ const errorMessages: Record<string, string> = {
   TEMPLATE_INVALID: "אחת התבניות דורשת תיקון.",
   TEMPLATE_CHANGED: "רשימת התבניות השתנתה. יש לרענן.",
   UNCLASSIFIED_FIELD: "יש לסווג את השדות החדשים לפני ההפקה.",
+  MULTIPLE_PARTIES_REQUIRE_REPEAT_SECTION:
+    "אחת התבניות אינה מגדירה אזור חוזר למספר קונים או מוכרים. יש להוסיף לתבנית סימוני חזרה מתאימים.",
 };
 
 const createDefaultValues = (): FormData => ({
@@ -254,13 +255,6 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
       title: `לנקות את אזור ${label}?`,
       description: "רק הנתונים באזור זה יימחקו. בחירת המסמכים ושאר הטופס יישארו ללא שינוי.",
       confirmLabel: "ניקוי האזור",
-    });
-  };
-  const requestFieldReset = (target: ClearTarget, label: string): void => {
-    requestClearFields([target], {
-      title: `לנקות את השדה „${label}”?`,
-      description: "הערך בשדה זה בלבד יימחק. יתר הטופס יישאר ללא שינוי.",
-      confirmLabel: "ניקוי השדה",
     });
   };
   const requestDocumentReset = (): void => {
@@ -472,14 +466,9 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             fields={visibleFields(req.buyerFields)}
             prefix="buyers"
             register={register}
-            control={control}
             errors={errors}
             canReset={sectionCanClear("buyers", visibleFields(req.buyerFields))}
-            isFieldDirty={(index, key) => Boolean(dirtyFields.buyers?.[index]?.values?.[key])}
             onReset={(fields) => requestSectionReset("buyers", "קונים", fields)}
-            onClearField={(path, field) =>
-              requestFieldReset(createClearTarget(path, field), field.label)
-            }
           />
           <PartySection
             title="מוכרים"
@@ -490,14 +479,9 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
             fields={visibleFields(req.sellerFields)}
             prefix="sellers"
             register={register}
-            control={control}
             errors={errors}
             canReset={sectionCanClear("sellers", visibleFields(req.sellerFields))}
-            isFieldDirty={(index, key) => Boolean(dirtyFields.sellers?.[index]?.values?.[key])}
             onReset={(fields) => requestSectionReset("sellers", "מוכרים", fields)}
-            onClearField={(path, field) =>
-              requestFieldReset(createClearTarget(path, field), field.label)
-            }
           />
           {visibleFields(req.propertyFields).length > 0 && (
             <div className="card">
@@ -523,12 +507,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
                     field={f}
                     name={`property.values.${f.key}`}
                     register={register}
-                    control={control}
-                    dirty={Boolean(dirtyFields.property?.values?.[f.key])}
                     error={errors.property?.values?.[f.key]?.message}
-                    onClear={() =>
-                      requestFieldReset(createClearTarget(`property.values.${f.key}`, f), f.label)
-                    }
                   />
                 ))}
               </div>
@@ -562,12 +541,7 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
                     field={f}
                     name={`transactionValues.${f.key}`}
                     register={register}
-                    control={control}
-                    dirty={Boolean(dirtyFields.transactionValues?.[f.key])}
                     error={errors.transactionValues?.[f.key]?.message}
-                    onClear={() =>
-                      requestFieldReset(createClearTarget(`transactionValues.${f.key}`, f), f.label)
-                    }
                   />
                 ))}
               </div>
@@ -575,10 +549,15 @@ export function GenerationPage({ onDirtyChange }: { onDirtyChange: (isDirty: boo
           )}
           <div className="generationActions">
             <div>
-              <span>הקבצים יורדו למחשב ואינם נשמרים במערכת.</span>
+              <span>הקבצים ישמרו למחשב ואינם נשמרים במערכת.</span>
             </div>
             <div>
-              <button type="button" className="secondary" onClick={resetForm}>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!isDirty && selected.length === 0}
+                onClick={resetForm}
+              >
                 איפוס מלא
               </button>
               <button className="primary" type="submit" disabled={generation.isPending}>
@@ -610,12 +589,9 @@ interface PartySectionProps {
   fields: FieldRequirement[];
   prefix: PartyPrefix;
   register: UseFormRegister<FormData>;
-  control: Control<FormData>;
   errors: FieldErrors<FormData>;
   canReset: boolean;
-  isFieldDirty: (index: number, key: string) => boolean;
   onReset: (fields: FieldRequirement[]) => void;
-  onClearField: (path: FormValuePath, field: FieldRequirement) => void;
 }
 
 function PartySection({
@@ -627,12 +603,9 @@ function PartySection({
   fields,
   prefix,
   register,
-  control,
   errors,
   canReset,
-  isFieldDirty,
   onReset,
-  onClearField,
 }: PartySectionProps) {
   if (fields.length === 0) return null;
 
@@ -678,10 +651,7 @@ function PartySection({
                   field={field}
                   name={name}
                   register={register}
-                  control={control}
-                  dirty={isFieldDirty(index, field.key)}
                   error={error}
-                  onClear={() => onClearField(name as FormValuePath, field)}
                 />
               );
             })}

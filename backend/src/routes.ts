@@ -12,7 +12,7 @@ import {
 import { resetFieldClassifications } from "./fields/field.service.js";
 import { generateDocument } from "./generation/document-generator.js";
 import { getRequirements } from "./generation/requirements.service.js";
-import { validateValues } from "./generation/validation.service.js";
+import { validatePartyCounts, validateValues } from "./generation/validation.service.js";
 import { AppError, asyncRoute } from "./http.js";
 import { scanTemplates } from "./templates/template-scanner.js";
 import { templateRegistry } from "./templates/template-registry.js";
@@ -277,6 +277,7 @@ router.post(
     if (templates.some((template) => !template.valid)) {
       throw new AppError(422, "TEMPLATE_INVALID");
     }
+    validatePartyCounts(templates, body.buyers.length, body.sellers.length);
     const mergedValues = {
       ...body.property.values,
       ...body.transactionValues,
